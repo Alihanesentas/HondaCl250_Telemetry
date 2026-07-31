@@ -1,0 +1,9 @@
+.pio
+.vscode/
+.DS_Store
+*.pem
+*.log
+mobile_app/flutter_app/.dart_tool/
+mobile_app/flutter_app/build/
+mobile_app/flutter_app/.packages
+mobile_app/flutter_app/.pub/

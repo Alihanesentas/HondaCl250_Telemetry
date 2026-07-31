@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Honda CL250 Telemetry Cockpit</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+    <!-- Header & BLE Bar -->
+    <header class="app-header">
+        <div class="brand-title">
+            <span class="brand-badge">HONDA</span>
+            <span>CL250 Telemetry</span>
+        </div>
+        <div class="status-container">
+            <div class="connection-pill">
+                <span class="status-dot" id="statusDot"></span>
+                <span id="statusText">Disconnected</span>
+            </div>
+            <button class="btn-ble" id="connectBtn">Connect BLE</button>
+        </div>
+    </header>
+
+    <!-- Main Dashboard Grid -->
+    <main class="dashboard-grid">
+
+        <!-- RPM & Speedometer Card -->
+        <section class="telemetry-card track-priority">
+            <div class="card-title">
+                <span>Speed & Tachometer</span>
+                <span style="color: var(--cyan-accent); font-size: 0.75rem;" id="rpmVal">0</span> RPM
+            </div>
+            <div class="hero-gauge-container">
+                <svg width="220" height="140" viewBox="0 0 220 140">
+                    <path d="M 20 120 A 90 90 0 0 1 200 120" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="14" stroke-linecap="round"/>
+                    <path id="rpmGaugeArc" d="M 20 120 A 90 90 0 0 1 200 120" fill="none" stroke="url(#rpmGradient)" stroke-width="14" stroke-linecap="round"/>
+                    
+                    <defs>
+                        <linearGradient id="rpmGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                            <stop offset="0%" stop-color="#00F0FF"/>
+                            <stop offset="70%" stop-color="#FFB800"/>
+                            <stop offset="100%" stop-color="#FF2E4C"/>
+                        </linearGradient>
+                    </defs>
+                </svg>
+
+                <div class="speed-display">
+                    <div class="speed-value" id="speedVal">0</div>
+                    <div class="speed-unit">KM/H</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Motorcycle Lean Angle Visualizer Card -->
+        <section class="telemetry-card track-priority">
+            <div class="card-title">
+                <span>Riding Dynamics</span>
+                <span id="leanAngleVal" style="color: var(--cyan-accent); font-weight: 800;">+0.0°</span>
+            </div>
+            <div class="lean-visual-container">
+                <svg class="bike-chassis-svg" id="bikeChassisSvg" viewBox="0 0 100 100">
+                    <circle cx="50" cy="78" r="14" fill="none" stroke="var(--cyan-accent)" stroke-width="5"/>
+                    <line x1="50" y1="78" x2="50" y2="40" stroke="#FFF" stroke-width="6" stroke-linecap="round"/>
+                    <polygon points="50,25 35,45 65,45" fill="var(--red-honda)"/>
+                    <line x1="25" y1="35" x2="75" y2="35" stroke="#FFF" stroke-width="5" stroke-linecap="round"/>
+                </svg>
+
+                <div class="lean-readout">
+                    <div class="lean-metric">
+                        <div class="val" id="maxLeftVal" style="color: var(--amber-warning);">0.0°</div>
+                        <div class="lbl">Max Left</div>
+                    </div>
+                    <div class="lean-metric">
+                        <div class="val" id="maxRightVal" style="color: var(--amber-warning);">0.0°</div>
+                        <div class="lbl">Max Right</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Trip Recorder & Session Statistics Card -->
+        <section class="telemetry-card">
+            <div class="card-title">
+                <span>Trip Recorder & Session Stats</span>
+                <span id="tripTimerVal" style="color: var(--green-ok); font-family: monospace;">00:00</span>
+            </div>
+            <div class="metrics-row">
+                <div class="mini-stat">
+                    <div class="unit">Max Speed</div>
+                    <div class="value" id="tripMaxSpeed">0 km/h</div>
+                </div>
+                <div class="mini-stat">
+                    <div class="unit">Max RPM</div>
+                    <div class="value" id="tripMaxRpm">0 RPM</div>
+                </div>
+                <div class="mini-stat">
+                    <div class="unit">Peak Left Lean</div>
+                    <div class="value" id="tripPeakLeft" style="color: var(--amber-warning);">0.0°</div>
+                </div>
+                <div class="mini-stat">
+                    <div class="unit">Peak Right Lean</div>
+                    <div class="value" id="tripPeakRight" style="color: var(--amber-warning);">0.0°</div>
+                </div>
+            </div>
+            <div class="trip-actions">
+                <button class="btn-action btn-start" id="startTripBtn">Start Trip</button>
+                <button class="btn-action" id="resetTripBtn" style="background: rgba(255,255,255,0.1); color: white;">Reset</button>
+                <button class="btn-action btn-export" id="exportCsvBtn">Export CSV</button>
+            </div>
+        </section>
+
+        <!-- Engine Metrics Card -->
+        <section class="telemetry-card urban-only">
+            <div class="card-title">
+                <span>Engine Metrics</span>
+            </div>
+            <div class="metrics-row">
+                <div class="mini-stat">
+                    <div class="unit">Coolant Temp</div>
+                    <div class="value" id="coolantVal">0 °C</div>
+                </div>
+                <div class="mini-stat">
+                    <div class="unit">Throttle Position</div>
+                    <div class="value" id="throttleVal">0 %</div>
+                </div>
+                <div class="mini-stat" style="grid-column: span 2;">
+                    <div class="unit">Battery Voltage</div>
+                    <div class="value" id="batteryVal" style="color: var(--green-ok);">0.0 V</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Smartphone Telematics Controller Card -->
+        <section class="telemetry-card urban-only">
+            <div class="card-title">
+                <span>Telematics & Display Sync</span>
+            </div>
+            <div class="telematics-form">
+                <div class="form-group">
+                    <label>Song Title</label>
+                    <input type="text" class="form-input" id="songInput" value="Highway Star">
+                </div>
+                <div class="form-group">
+                    <label>Artist Name</label>
+                    <input type="text" class="form-input" id="artistInput" value="Deep Purple">
+                </div>
+                <div class="form-group">
+                    <label>Nav Distance (meters)</label>
+                    <input type="number" class="form-input" id="navDistInput" value="450">
+                </div>
+                <button class="btn-sync" id="syncBtn">Sync to Handlebar Screen</button>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Mode Selector Footer Bar -->
+    <div class="mode-bar">
+        <button class="btn-mode" id="trackModeBtn">Track Mode</button>
+        <button class="btn-mode" id="urbanModeBtn">Urban Mode</button>
+        <button class="btn-mode" id="demoModeBtn">Demo Simulator</button>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
