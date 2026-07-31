@@ -12,20 +12,24 @@ bool IMUModule::begin() {
     Wire.write(0x6B); // PWR_MGMT_1 register
     Wire.write(0x00); // Set to 0 to wake up sensor
     if (Wire.endTransmission() != 0) {
+        _initialized = false;
         return false;
     }
 
+    _initialized = true;
     _lastMicro = micros();
     return true;
 }
 
 void IMUModule::update(SystemState& state) {
+    if (!_initialized) return;
+
     // Request 14 bytes starting from ACCEL_XOUT_H (0x3B)
     Wire.beginTransmission(_addr);
     Wire.write(0x3B);
-    Wire.endTransmission(false);
+    if (Wire.endTransmission(false) != 0) return;
+    
     Wire.requestFrom(_addr, (uint8_t)14, (uint8_t)true);
-
     if (Wire.available() < 14) return;
 
     int16_t rawAccX = (Wire.read() << 8) | Wire.read();

@@ -13,6 +13,7 @@ private:
     uint8_t _addr;
     int _sdaPin;
     int _sclPin;
+    bool _initialized = false;
     float _rollAngle = 0.0f;
     unsigned long _lastMicro = 0;
 
