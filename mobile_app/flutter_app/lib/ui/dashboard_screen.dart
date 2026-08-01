@@ -3,9 +3,9 @@ import '../services/ble_service.dart';
 import '../models/telemetry_data.dart';
 
 class DashboardScreen extends StatefulWidget {
-  const DashboardScreen({Key? key}) : super(key: bool);
+  const DashboardScreen({Key? key}) : super(key: key);
 
-  @override:
+  @override
   State<DashboardScreen> createState() => _DashboardScreenState();
 }
 
