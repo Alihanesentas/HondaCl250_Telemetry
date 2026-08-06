@@ -6,7 +6,7 @@ void main() {
 }
 
 class HondaTelemetryApp extends StatelessWidget {
-  const HondaTelemetryApp({Key? key}) : super(key: key);
+  const HondaTelemetryApp({super.key});
 
   @override
   Widget build(BuildContext context) {

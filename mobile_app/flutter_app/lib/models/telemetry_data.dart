@@ -35,30 +35,34 @@ class TelemetryData {
     );
   }
 
-  /// Parses 12-byte binary packet received from BLE notification.
+  /// Parses 13-byte binary packet received from BLE notification.
   factory TelemetryData.fromBinaryBuffer(Uint8List bytes) {
-    if (bytes.length < 12) return TelemetryData.initial();
+    if (bytes.length < 13) return TelemetryData.initial();
 
-    final buffer = ByteData.sublistView(bytes);
+    try {
+      final buffer = ByteData.sublistView(bytes);
 
-    final rpm = buffer.getUint16(0, Endian.little).toDouble();
-    final speed = buffer.getUint8(2);
-    final coolantTemp = buffer.getInt8(3);
-    final throttlePos = buffer.getUint8(4).toDouble();
-    final batteryVolt = buffer.getUint16(5, Endian.little) / 1000.0;
-    final leanAngle = buffer.getInt16(7, Endian.little) / 10.0;
-    final maxLeanRight = buffer.getInt16(9, Endian.little) / 10.0;
-    final maxLeanLeft = buffer.getInt16(11, Endian.little) / 10.0;
+      final rpm = buffer.getUint16(0, Endian.little).toDouble();
+      final speed = buffer.getUint8(2);
+      final coolantTemp = buffer.getInt8(3);
+      final throttlePos = buffer.getUint8(4).toDouble();
+      final batteryVolt = buffer.getUint16(5, Endian.little) / 1000.0;
+      final leanAngle = buffer.getInt16(7, Endian.little) / 10.0;
+      final maxLeanRight = buffer.getInt16(9, Endian.little) / 10.0;
+      final maxLeanLeft = buffer.getInt16(11, Endian.little) / 10.0;
 
-    return TelemetryData(
-      rpm: rpm,
-      speed: speed,
-      coolantTemp: coolantTemp,
-      throttlePos: throttlePos,
-      batteryVolt: batteryVolt,
-      leanAngle: leanAngle,
-      maxLeanRight: maxLeanRight,
-      maxLeanLeft: maxLeanLeft,
-    );
+      return TelemetryData(
+        rpm: rpm,
+        speed: speed,
+        coolantTemp: coolantTemp,
+        throttlePos: throttlePos,
+        batteryVolt: batteryVolt,
+        leanAngle: leanAngle,
+        maxLeanRight: maxLeanRight,
+        maxLeanLeft: maxLeanLeft,
+      );
+    } catch (e) {
+      return TelemetryData.initial();
+    }
   }
 }

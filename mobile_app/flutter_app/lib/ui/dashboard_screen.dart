@@ -1,9 +1,10 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/ble_service.dart';
 import '../models/telemetry_data.dart';
 
 class DashboardScreen extends StatefulWidget {
-  const DashboardScreen({Key? key}) : super(key: key);
+  const DashboardScreen({super.key});
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
@@ -18,16 +19,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
   final TextEditingController _artistCtrl = TextEditingController(text: "Deep Purple");
   final TextEditingController _distCtrl = TextEditingController(text: "450");
 
+  StreamSubscription<bool>? _connSub;
+  StreamSubscription<TelemetryData>? _telemSub;
+
   @override
   void initState() {
     super.initState();
-    _bleService.connectionStream.listen((connected) {
-      setState(() => _isConnected = connected);
+    _connSub = _bleService.connectionStream.listen((connected) {
+      if (mounted) setState(() => _isConnected = connected);
     });
 
-    _bleService.telemetryStream.listen((data) {
-      setState(() => _data = data);
+    _telemSub = _bleService.telemetryStream.listen((data) {
+      if (mounted) setState(() => _data = data);
     });
+  }
+
+  @override
+  void dispose() {
+    _connSub?.cancel();
+    _telemSub?.cancel();
+    _songCtrl.dispose();
+    _artistCtrl.dispose();
+    _distCtrl.dispose();
+    super.dispose();
   }
 
   @override
