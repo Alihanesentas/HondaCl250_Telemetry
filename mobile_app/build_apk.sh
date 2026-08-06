@@ -14,10 +14,17 @@ flutter pub get
 echo "2. Building release Android APK package..."
 flutter build apk --release
 
+mkdir -p ../release_apk
+cp build/app/outputs/flutter-apk/app-release.apk ../release_apk/HondaCL250_Telemetry.apk
+cp build/app/outputs/flutter-apk/app-release.apk ../HondaCL250_Telemetry.apk
+
 echo ""
 echo "=========================================================="
 echo "   APK BUILD COMPLETE!                                    "
 echo "=========================================================="
-echo "Location: mobile_app/flutter_app/build/app/outputs/flutter-apk/app-release.apk"
+echo "Release APK copies generated:"
+echo " 1) mobile_app/release_apk/HondaCL250_Telemetry.apk"
+echo " 2) mobile_app/HondaCL250_Telemetry.apk"
+echo " 3) mobile_app/flutter_app/build/app/outputs/flutter-apk/app-release.apk"
 echo "Install on your Android phone via USB ADB or direct download."
 echo "=========================================================="
