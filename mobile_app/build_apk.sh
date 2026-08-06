@@ -5,6 +5,16 @@ echo "=========================================================="
 echo "   HONDA CL250 NATIVE ANDROID APK BUILD PROCESS           "
 echo "=========================================================="
 
+# Environment paths for Flutter and Java 17
+if [ -d "$HOME/development/flutter/bin" ]; then
+    export PATH="$HOME/development/flutter/bin:$PATH"
+fi
+
+if [ -d "/opt/homebrew/opt/openjdk@17" ]; then
+    export JAVA_HOME="/opt/homebrew/opt/openjdk@17"
+    export PATH="$JAVA_HOME/bin:$PATH"
+fi
+
 CD_DIR="$(dirname "$0")/flutter_app"
 cd "$CD_DIR" || exit 1
 
