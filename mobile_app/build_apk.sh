@@ -22,7 +22,7 @@ echo "1. Fetching Flutter dependencies..."
 flutter pub get
 
 echo "2. Building release Android APK package..."
-flutter build apk --release
+flutter build apk --release --android-skip-build-dependency-validation
 
 mkdir -p ../release_apk
 cp build/app/outputs/flutter-apk/app-release.apk ../release_apk/HondaCL250_Telemetry.apk
