@@ -201,6 +201,13 @@
 **Yap:** Yazma karakteristiğine eşleştirme/şifreleme (bonding) şartı. Okuma/bildirim açık kalabilir.
 **Kabul:** Eşleşmemiş cihazın yazma denemesi reddediliyor.
 
+> ✅ **TAMAMLANDI** (embedded-systems subagent'ı uyguladı, ben bağımsız doğruladım) — `src/BLEServerModule.cpp:4-52` (yalnızca bu dosya değişti, `.h`'ye ve G1.2 kuyruk mimarisine dokunulmadı).
+> - Proje klasik Bluedroid tabanlı "ESP32 BLE Arduino" kütüphanesini kullanıyor (NimBLE değil) — bu kütüphanede `PROPERTY_WRITE_ENC` diye bir bayrak **yok**; şifreleme zorunluluğu `BLECharacteristic::setAccessPermissions(ESP_GATT_PERM_WRITE_ENCRYPTED)` ile ayrı bir GATT-permission katmanında sağlanıyor. Bunu hem subagent hem ben kurulu framework header'larından (`BLECharacteristic.h`, `esp_gatt_defs.h`, `esp_gap_ble_api.h`) okuyarak doğruladık, tahmine dayanmadı.
+> - `begin()`'de `BLESecurity` ile bonding zorunlu kılındı: `ESP_LE_AUTH_REQ_SC_BOND` (secure connections + bonding) + `ESP_IO_CAP_NONE` (kartın ekranı/klavyesi yok → "Just Works" eşleşmesi — MITM koruması yok ama amaç zaten sadece eşleşmemiş yabancı cihazları engellemek, aktif saldırgana karşı değil; bu net bir kabul edilmiş sınır, `SECURITY.md`'de de yazılacak).
+> - RX (yazma) karakteristiğine `ESP_GATT_PERM_WRITE_ENCRYPTED` eklendi (bilerek düz `ESP_GATT_PERM_WRITE` ile OR'lanmadı, yoksa şifresiz yazmaya da izin verirdi). TX (notify) hiç dokunulmadı, açık kaldı.
+> **Doğrulama:** Her iki ortam benim tarafımdan bağımsız temiz build edildi; ayrıca kullanılan tüm sabitlerin (`ESP_GATT_PERM_WRITE_ENCRYPTED`, `ESP_LE_AUTH_REQ_SC_BOND`, `ESP_IO_CAP_NONE`) gerçekten kurulu framework header'larında var olduğunu ben de ayrıca grep ile teyit ettim.
+> ⚠️ **Kabul kriterinin tam doğrulaması** ("eşleşmemiş cihazın yazma denemesi reddediliyor") **sadece gerçek telefon + gerçek ESP32-S3 donanımıyla** yapılabilir — BLE bonding/şifreleme stack davranışı bu ortamda simüle edilemez. Flaş sonrası: (a) eşleşmeden yazma denemesinin reddedildiğini, (b) telefon uygulamasının ilk bağlantıda "Pair with Honda-CL250-Telemetry?" isteğiyle karşılaştığını, (c) eşleştikten sonra normal yazmanın çalışmaya devam ettiğini test etmen gerekiyor.
+
 ### G4.3 — Girdi doğrulama
 **Problem:** BLE ve HTTP üzerinden gelen string'ler (şarkı adı, navigasyon) doğrudan Nextion'a gidiyorsa taşma veya komut enjeksiyonu riski var.
 **Yap:** Uzunluk sınırı, karakter filtreleme, Nextion komut sonlandırıcısı (`0xFF 0xFF 0xFF`) içeren girdilerin temizlenmesi.

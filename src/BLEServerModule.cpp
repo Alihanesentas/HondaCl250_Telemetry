@@ -1,6 +1,16 @@
 #include "BLEServerModule.h"
 #include <cstring>
 
+// G4.2 -- Real GATT-level security API (Bluedroid, esp32-arduino framework), not NimBLE.
+// Verified against the framework headers actually installed for this project:
+//   ~/.platformio/packages/framework-arduinoespressif32/libraries/BLE/src/BLESecurity.h
+//   .../esp_gap_ble_api.h  (ESP_LE_AUTH_REQ_SC_BOND, ESP_IO_CAP_NONE)
+//   .../esp_gatt_defs.h    (ESP_GATT_PERM_WRITE_ENCRYPTED)
+// This BLECharacteristic implementation has NO PROPERTY_WRITE_ENC flag -- encryption is
+// enforced purely via BLECharacteristic::setAccessPermissions(esp_gatt_perm_t), which is
+// GATT-server-side and independent of the ATT PROPERTY_* bits.
+#include <BLESecurity.h>
+
 // Custom UUIDs for Honda Telemetry BLE Service & Characteristics
 #define SERVICE_UUID           "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
 #define CHARACTERISTIC_UUID_TX "beb5483e-36e1-4688-b7f5-ea07361b26a8"
@@ -15,6 +25,31 @@ bool BLEServerModule::begin() {
     // Initialize BLE Device with maximum MTU (512 bytes)
     BLEDevice::init("Honda-CL250-Telemetry");
     BLEDevice::setMTU(512);
+
+    // G4.2 -- BLE access control: the RX (write) characteristic accepts phone-controlled
+    // strings (song title/artist, nav data) that end up on the rider's Nextion dashboard.
+    // Without this, ANY BLE device in range can write to it without ever pairing. This
+    // forces bonding + link encryption before a write is accepted; onWrite() will simply
+    // never fire for an unbonded/unencrypted peer (the stack rejects the ATT write itself).
+    //
+    // IO capability is ESP_IO_CAP_NONE ("Just Works" pairing) because this board has no
+    // display or keypad to show/enter a 6-digit passkey -- it's the only realistic option
+    // for this hardware. Just Works still requires the OS-level pairing/bonding dialog and
+    // encrypts the link, but it does NOT protect against a man-in-the-middle during the
+    // initial pairing (no ESP_LE_AUTH_REQ_MITM). That tradeoff is acceptable here: the goal
+    // is to stop opportunistic/unpaired writes from strangers in BLE range, not to defend
+    // against an active attacker during the one-time pairing handshake.
+    //
+    // UX note: because bonding is now mandatory, the phone app (mobile_app/) will see an
+    // OS-level "Pair with Honda-CL250-Telemetry?" prompt on first connection. No mobile
+    // code change is required -- the OS Bluetooth stack triggers this pairing dialog
+    // automatically in response to the peripheral's security requirements.
+    BLESecurity* pSecurity = new BLESecurity();
+    pSecurity->setAuthenticationMode(ESP_LE_AUTH_REQ_SC_BOND);
+    pSecurity->setCapability(ESP_IO_CAP_NONE);
+    pSecurity->setInitEncryptionKey(ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK);
+    pSecurity->setRespEncryptionKey(ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK);
+    pSecurity->setKeySize(16);
 
     // Create BLE Server instance
     _pServer = BLEDevice::createServer();
@@ -54,6 +89,11 @@ bool BLEServerModule::begin() {
         CHARACTERISTIC_UUID_RX,
         BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_WRITE_NR
     );
+    // G4.2 -- require an encrypted (bonded) link to write here. This framework's
+    // BLECharacteristic has no PROPERTY_WRITE_ENC bit; encryption is enforced solely via
+    // the GATT access permission below. Deliberately NOT OR'd with ESP_GATT_PERM_WRITE --
+    // that would still permit plaintext writes and defeat the purpose.
+    _pRxCharacteristic->setAccessPermissions(ESP_GATT_PERM_WRITE_ENCRYPTED);
     _pRxCharacteristic->setCallbacks(this);
 
     pService->start();
