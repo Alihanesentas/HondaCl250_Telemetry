@@ -53,6 +53,7 @@ void IMUModule::update(SystemState& state) {
 
     // Update global dynamics state
     state.dynamics.leanAngle = _rollAngle;
+    state.dynamics.leanAngleUpdatedMs = millis();
     if (_rollAngle > state.dynamics.maxLeanRight) {
         state.dynamics.maxLeanRight = _rollAngle;
     }

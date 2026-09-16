@@ -118,15 +118,19 @@ void HondaCANModule::update(SystemState& state) {
             switch (did) {
                 case 0xF40C: // Engine RPM
                     state.engine.rpm = ((rxMsg.data[4] << 8) | rxMsg.data[5]) / 4.0f;
+                    state.engine.rpmUpdatedMs = now;
                     break;
                 case 0xF40D: // Vehicle Speed (km/h)
                     state.engine.speed = rxMsg.data[4];
+                    state.engine.speedUpdatedMs = now;
                     break;
                 case 0xF405: // Coolant Temperature (°C)
                     state.engine.coolantTemp = rxMsg.data[4] - 40;
+                    state.engine.coolantTempUpdatedMs = now;
                     break;
                 case 0xF411: // Throttle Position (%)
                     state.engine.throttlePos = (rxMsg.data[4] * 100.0f) / 255.0f;
+                    state.engine.throttlePosUpdatedMs = now;
                     break;
                 case 0xF442: // Battery Voltage (mV / V)
                     if (rxMsg.data_length_code >= 6) {
@@ -135,6 +139,7 @@ void HondaCANModule::update(SystemState& state) {
                     } else {
                         state.engine.batteryVoltage = rxMsg.data[4] / 10.0f;
                     }
+                    state.engine.batteryVoltageUpdatedMs = now;
                     break;
             }
         }

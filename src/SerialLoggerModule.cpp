@@ -13,8 +13,13 @@ void SerialLoggerModule::update(SystemState& state) {
     if (now - _lastPrint >= _printIntervalMs) {
         _lastPrint = now;
 
-        Serial.printf("[TELEMETRY] RPM: %6.1f | SPEED: %3d km/h | TPS: %5.1f%% | ECT: %3d°C | BATT: %4.1fV | LEAN: %5.1f° (L:%.1f°/R:%.1f°) | BLE: %s\n",
+        // G0.3: RPM staleness surfaced here as the reference signal (500ms threshold).
+        // Other per-signal *UpdatedMs timestamps in SystemState are available the same way.
+        bool rpmStale = isStale(state.engine.rpmUpdatedMs);
+
+        Serial.printf("[TELEMETRY] RPM: %6.1f%s | SPEED: %3d km/h | TPS: %5.1f%% | ECT: %3d°C | BATT: %4.1fV | LEAN: %5.1f° (L:%.1f°/R:%.1f°) | BLE: %s\n",
                       state.engine.rpm,
+                      rpmStale ? " [STALE]" : "",
                       state.engine.speed,
                       state.engine.throttlePos,
                       state.engine.coolantTemp,
