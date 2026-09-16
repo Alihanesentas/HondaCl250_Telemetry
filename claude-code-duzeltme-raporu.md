@@ -189,6 +189,13 @@
 **Yap:** WPA2 + parola. Parola kaynak koda gömülmesin (NVS veya build flag). AP'yi varsayılan kapalı yap, kullanıcı isteğiyle açılsın.
 **Kabul:** Parolasız bağlantı reddediliyor.
 
+> ✅ **TAMAMLANDI** (embedded-systems subagent'ı uyguladı, ben build ile bağımsız doğruladım) — Tespit: kod zaten WPA2 kullanıyordu (`AP_PASS "HondaCL250"`, 10 karakter), asıl eksik parolanın kaynak kodda gömülü olması ve AP'nin varsayılan açık olmasıydı.
+> - `platformio.ini` — `[platformio] extra_configs = platformio_local.ini`; mock ortamı `build_flags = ${env:esp32-s3-devkitc-1.build_flags} -D MOCK_CAN_DATA` ile flag'i miras alıyor.
+> - `platformio_local.ini.example` (commit'li şablon) + `.gitignore`'a `platformio_local.ini` eklendi — gerçek parola artık repoda yok, her geliştirici kendi yerel dosyasını oluşturuyor.
+> - `src/WiFiServerModule.cpp:4-8` — `AP_PASSWORD` tanımlı değilse derleme `#error` ile durur (bağımsız doğruladım: dosyayı geçici kaldırınca build FAILED, geri koyunca SUCCESS).
+> - `src/WiFiServerModule.h:20-27`, `.cpp:13-46,72-96` — AP artık `begin()`'de açılmıyor; iki tetikleyiciden biri gerçekleşene kadar kapalı kalıyor: **(1)** açılıştan sonraki ilk ~1sn içinde BOOT tuşuna (GPIO0, ek donanım yok) basılı tutma, **(2)** BLE 15sn içinde bağlanamazsa otomatik açılma (`state.telematics.phoneConnected` — mevcut `app.js`/Dart "BLE başarısız → WiFi fallback" akışını hiç bozmuyor). Açıldıktan sonra tekrar kapanmıyor (kasıtlı, basitlik için).
+> **Doğrulama:** Her iki ortam (`esp32-s3-devkitc-1`, `-mock`) benim tarafımdan da temiz build edildi; `#error` testi bağımsız tekrarlandı.
+
 ### G4.2 — BLE erişim kontrolü
 **Problem:** Telematik yazma karakteristiği korumasızsa yabancı biri gidon ekranına yazı yazabilir.
 **Yap:** Yazma karakteristiğine eşleştirme/şifreleme (bonding) şartı. Okuma/bildirim açık kalabilir.

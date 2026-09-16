@@ -2,7 +2,10 @@
 
 // Access Point Credentials
 #define AP_SSID "Honda-CL250-AP"
-#define AP_PASS "HondaCL250"
+
+#ifndef AP_PASSWORD
+#error "AP_PASSWORD not defined. Copy platformio_local.ini.example to platformio_local.ini (gitignored) and set your own AP password there."
+#endif
 
 WiFiServerModule::WiFiServerModule(uint16_t port)
     : _server(port) {}
@@ -14,21 +17,32 @@ bool WiFiServerModule::begin() {
     // a needless window for a sudden power-cut mid-write to corrupt the NVS partition.
     WiFi.persistent(false);
 
+    // G4.1: Do NOT start the SoftAP here. It stays off until a trigger fires
+    // in update(): BOOT button held at startup, or BLE fallback timeout.
+    pinMode(BOOT_BUTTON_PIN, INPUT_PULLUP);
+    _bootTimeMs = millis();
+
+    _initialized = true;
+    return true;
+}
+
+void WiFiServerModule::enableAccessPoint(const char* reason) {
+    if (_apEnabled) {
+        return;
+    }
+
     // Configure ESP32 as Wi-Fi Access Point (SoftAP)
     WiFi.mode(WIFI_AP);
-    bool apStarted = WiFi.softAP(AP_SSID, AP_PASS);
-    
-    if (!apStarted) {
-        return false;
-    }
+    WiFi.softAP(AP_SSID, AP_PASSWORD);
 
     // Configure HTTP route endpoints
     _server.on("/", std::bind(&WiFiServerModule::handleRoot, this));
     _server.on("/api/telemetry", std::bind(&WiFiServerModule::handleTelemetryJson, this));
 
     _server.begin();
-    _initialized = true;
-    return true;
+    _apEnabled = true;
+
+    Serial.printf("[WIFI] Access Point enabled: %s\n", reason);
 }
 
 void WiFiServerModule::handleRoot() {
@@ -71,5 +85,26 @@ void WiFiServerModule::handleTelemetryJson() {
 
 void WiFiServerModule::update(const SystemState& state) {
     _pSystemState = &state;
+
+    if (!_apEnabled) {
+        unsigned long now = millis();
+
+        // Trigger 1: BOOT button (GPIO0, LOW = pressed) held within the first
+        // ~1 second after startup.
+        if (!_bootButtonHeld && (now - _bootTimeMs) < 1000 && digitalRead(BOOT_BUTTON_PIN) == LOW) {
+            _bootButtonHeld = true;
+            enableAccessPoint("BOOT button held at startup");
+        }
+        // Trigger 2: BLE hasn't connected within 15s -> auto fallback (keeps the
+        // existing app.js/Dart "BLE failed -> WiFi fallback" flow unchanged).
+        else if (!state.telematics.phoneConnected && (now - _bootTimeMs) >= BLE_FALLBACK_TIMEOUT_MS) {
+            enableAccessPoint("BLE not connected within 15s (auto fallback)");
+        }
+
+        if (!_apEnabled) {
+            return; // AP not enabled yet, don't call handleClient()
+        }
+    }
+
     _server.handleClient();
 }
