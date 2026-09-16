@@ -32,15 +32,23 @@ void NextionModule::update(SystemState& state) {
     if (now - _lastRender >= 100) {
         _lastRender = now;
 
-        // Engine telemetry
-        setVal("n_rpm", (int32_t)state.engine.rpm);
-        setVal("n_speed", state.engine.speed);
-        setVal("n_temp", state.engine.coolantTemp);
-        setVal("n_tps", (int32_t)state.engine.throttlePos);
-        setVal("n_volt", (int32_t)(state.engine.batteryVoltage * 10.0f)); // e.g. 12.4V -> 124
+        // G1.4 safe state: a signal past its staleness threshold (G0.3) is sent as
+        // NEXTION_STALE_SENTINEL instead of its last-known value, so a severed CAN
+        // line stops rendering as if the engine were still reporting live data.
+        // NOTE: -999 is out of range for every field below (RPM/speed/TPS/volt are
+        // never negative; lean angle stays within +-90 deg in practice), so it is
+        // safe to use as a sentinel across all of them.
+        // Open follow-up (needs the Nextion Editor .HMI project, not present in this
+        // repo): configure each numeric component (or an overlay text component) to
+        // render -999 as "--" instead of the literal number.
+        setVal("n_rpm",   isStale(state.engine.rpmUpdatedMs)         ? NEXTION_STALE_SENTINEL : (int32_t)state.engine.rpm);
+        setVal("n_speed", isStale(state.engine.speedUpdatedMs)       ? NEXTION_STALE_SENTINEL : (int32_t)state.engine.speed);
+        setVal("n_temp",  isStale(state.engine.coolantTempUpdatedMs) ? NEXTION_STALE_SENTINEL : (int32_t)state.engine.coolantTemp);
+        setVal("n_tps",   isStale(state.engine.throttlePosUpdatedMs) ? NEXTION_STALE_SENTINEL : (int32_t)state.engine.throttlePos);
+        setVal("n_volt",  isStale(state.engine.batteryVoltageUpdatedMs) ? NEXTION_STALE_SENTINEL : (int32_t)(state.engine.batteryVoltage * 10.0f)); // e.g. 12.4V -> 124
 
         // Vehicle dynamics telemetry
-        setVal("n_lean", (int32_t)state.dynamics.leanAngle);
+        setVal("n_lean", isStale(state.dynamics.leanAngleUpdatedMs) ? NEXTION_STALE_SENTINEL : (int32_t)state.dynamics.leanAngle);
 
         // Telematics / Smartphone integration (optional Nextion UI widgets)
         if (state.telematics.phoneConnected) {

@@ -3,6 +3,11 @@
 
 #include "IModule.h"
 
+// G1.4 -- Out-of-range sentinel sent to a Nextion numeric component when its backing
+// SystemState signal is stale (see isStale() in SystemState.h). See NextionModule.cpp
+// for why -999 is safe across every field currently rendered.
+constexpr int32_t NEXTION_STALE_SENTINEL = -999;
+
 /**
  * @brief Nextion HMI display driver module.
  * Sends updated telemetry values over HardwareSerial (UART) using Nextion instructions.

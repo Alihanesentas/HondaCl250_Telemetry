@@ -1,5 +1,7 @@
 #include <Arduino.h>
 #include <esp_timer.h>
+#include <esp_task_wdt.h>
+#include <esp_system.h>
 
 #include "SystemState.h"
 #include "IModule.h"
@@ -25,6 +27,10 @@
 // Free GPIO used purely for loop-timing observation (oscilloscope / logic analyzer probe).
 // Not wired to any peripheral above (4,5,1,2,17,18 are taken).
 #define DEBUG_LOOP_PIN  GPIO_NUM_8
+
+// G1.4 -- Task Watchdog Timer. If loop() ever stalls (a module hangs) for longer than
+// this, the TWDT panics and resets the board rather than leaving a dead unit riding.
+#define TWDT_TIMEOUT_S  5
 
 // Hardware Serial 2 Instance for Nextion HMI Display
 HardwareSerial NextionSerial(2);
@@ -93,6 +99,24 @@ const unsigned long TIMING_REPORT_INTERVAL_MS = 10000;
 bool moduleActive[MODULE_COUNT];
 
 // ============================================================================
+// G1.4 -- helper to name a reset reason for the boot log
+// ============================================================================
+const char* resetReasonName(esp_reset_reason_t reason) {
+    switch (reason) {
+        case ESP_RST_POWERON:   return "POWERON";
+        case ESP_RST_EXT:       return "EXTERNAL_PIN";
+        case ESP_RST_SW:        return "SOFTWARE";
+        case ESP_RST_PANIC:     return "PANIC (exception)";
+        case ESP_RST_INT_WDT:   return "INTERRUPT_WATCHDOG";
+        case ESP_RST_TASK_WDT:  return "TASK_WATCHDOG (loop stalled)";
+        case ESP_RST_WDT:       return "OTHER_WATCHDOG";
+        case ESP_RST_BROWNOUT:  return "BROWNOUT (power dip)";
+        case ESP_RST_SDIO:      return "SDIO";
+        default:                return "UNKNOWN";
+    }
+}
+
+// ============================================================================
 // SETUP & MAIN LOOP
 // ============================================================================
 void setup() {
@@ -103,6 +127,11 @@ void setup() {
     Serial.println("\n==================================================");
     Serial.println("   HONDA CL250 DUAL-TRANSPORT TELEMETRY STARTING  ");
     Serial.println("==================================================");
+    Serial.printf(" [BOOT] Reset reason: %s\n", resetReasonName(esp_reset_reason()));
+
+    // G1.4: enable Task Watchdog Timer and subscribe the main loop task to it.
+    esp_task_wdt_init(TWDT_TIMEOUT_S, true /* panic + reset on timeout */);
+    esp_task_wdt_add(NULL);
 
     pinMode(DEBUG_LOOP_PIN, OUTPUT);
     digitalWrite(DEBUG_LOOP_PIN, LOW);
@@ -146,6 +175,10 @@ void loop() {
 
     loopTiming.record((uint32_t)(esp_timer_get_time() - loopStartUs));
     digitalWrite(DEBUG_LOOP_PIN, LOW);
+
+    // G1.4: feed the watchdog once per completed loop pass. If any module hangs
+    // (blocking I/O, infinite loop) this stops happening and TWDT resets the board.
+    esp_task_wdt_reset();
 
     unsigned long now = millis();
     if (now - lastTimingReport >= TIMING_REPORT_INTERVAL_MS) {
