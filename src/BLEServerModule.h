@@ -55,6 +55,7 @@ private:
     bool _deviceConnected = false;
     bool _oldDeviceConnected = false;
     unsigned long _lastNotify = 0;
+    uint8_t _txSeq = 0; // G3.3 -- rolling packet sequence counter, see BLETelemetryPacket.h
 
     QueueHandle_t _telematicsQueue = nullptr;
 

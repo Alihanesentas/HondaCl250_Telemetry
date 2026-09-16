@@ -168,6 +168,8 @@ void BLEServerModule::update(SystemState& state) {
         _lastNotify = now;
 
         BLETelemetryPacket packet;
+        packet.version      = BLE_PACKET_VERSION;
+        packet.seq          = _txSeq++; // wraps 0-255 by design; receivers detect loss from gaps
         packet.rpm          = (uint16_t)state.engine.rpm;
         packet.speed        = state.engine.speed;
         packet.coolantTemp  = (int8_t)state.engine.coolantTemp;

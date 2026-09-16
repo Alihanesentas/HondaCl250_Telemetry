@@ -162,6 +162,13 @@
 **Yap:** Formatı tek bir şema dosyasında (JSON veya basit tablo) belgele; üç implementasyonun da o şemayı referans aldığını yorum satırıyla işaretle. Pakete **`version` (1 bayt)** ve **`seq` (1 bayt)** alanları ekle.
 **Kabul:** Sürüm uyuşmazlığında istemci paketi reddediyor; `seq` ile paket kaybı ölçülebiliyor.
 
+> ✅ **TAMAMLANDI** — `docs/ble_telemetry_packet_schema.json` (tek kaynak, kullanıcı isteğiyle Markdown değil **JSON** — ileride TinyML eğitim verisi hattı için makine tarafından okunabilir olması gerekiyor). Pakete `version`+`seq` en başa eklendi (13→**15 bayt**, ⚠️ kırıcı protokol değişikliği, üç taraf da bu turda yeniden build edildi):
+> - `src/BLETelemetryPacket.h` — `BLE_PACKET_VERSION` tanımı + yeni alanlar + şemaya referans yorumu.
+> - `src/BLEServerModule.h/.cpp` — `_txSeq` sayacı, her notify'da `version`/`seq` set ediliyor.
+> - `mobile_app/app.js` — `BLE_PACKET_EXPECTED_VERSION`/`BLE_PACKET_SIZE_BYTES`, `appState.packetStats` (sürüm reddi + `seq` boşluğundan kayıp paket sayacı, 0-255 dönüşünü hesaba katarak).
+> - `mobile_app/flutter_app/lib/models/telemetry_data.dart` — aynı mantık, statik `TelemetryData.receivedCount/lostCount/versionRejectedCount` sayaçları.
+> **Doğrulama:** ESP32 tarafı `pio run` (her iki ortam) ile; C struct offsetleri `offsetof()` ile host'ta gcc kullanılarak doğrulandı (sizeof=15, offsetler 0,1,2,4,5,6,7,9,11,13 — şema ve her iki mobil implementasyonla birebir eşleşiyor); `app.js` hem `node --check` hem bilinen sabit değerlerle sahte paket kodlayıp elle decode ederek doğrulandı. `test/` klasöründe pakete bağlı hardcoded byte dizisi olmadığı için mevcut testler etkilenmedi.
+
 ### G3.4 — Zamanlama mantığının merkezileştirilmesi
 **Problem:** Her modül kendi `millis()` karşılaştırmasını yapıyor; zamanlama politikası dağılmış.
 **Yap:** `IModule`'e periyot bilgisi ekle; çizelgeleme `main.cpp`'de tek yerde yapılsın.

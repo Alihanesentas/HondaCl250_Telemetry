@@ -1,0 +1,28 @@
+{
+  "$schemaDescription": "G3.3 -- Single source of truth for the BLE telemetry notification packet. All three implementations (src/BLETelemetryPacket.h, mobile_app/app.js, mobile_app/flutter_app/lib/models/telemetry_data.dart) must match this file exactly and reference it by path in a comment. Also intended as a machine-readable format for future tooling (e.g. a TinyML training-data pipeline that decodes logged BLE packets without hand-maintaining a second copy of this layout).",
+  "packetName": "BLETelemetryPacket",
+  "version": 1,
+  "endianness": "little",
+  "packed": true,
+  "totalBytes": 15,
+  "versioning": {
+    "rule": "Receivers MUST read `version` first and reject/drop the packet if it does not match the version they were built against. Any change to field order, size, or meaning below requires incrementing `version` here and in all three implementations together.",
+    "currentVersion": 1
+  },
+  "sequenceNumber": {
+    "field": "seq",
+    "rule": "Rolls over 0-255. Receivers track the last seen seq and compute (currentSeq - lastSeq - 1) mod 256 as the number of packets lost since the previous one, to measure BLE notification loss."
+  },
+  "fields": [
+    { "name": "version",      "offset": 0,  "size": 1, "type": "uint8",  "description": "Packet format version. Must equal `version` above; receivers reject the packet otherwise." },
+    { "name": "seq",          "offset": 1,  "size": 1, "type": "uint8",  "description": "Rolling 0-255 counter incremented once per packet sent; used to detect and count lost BLE notifications." },
+    { "name": "rpm",          "offset": 2,  "size": 2, "type": "uint16", "description": "Engine RPM, range 0-15000." },
+    { "name": "speed",        "offset": 4,  "size": 1, "type": "uint8",  "description": "Vehicle speed in km/h, range 0-255." },
+    { "name": "coolantTemp",  "offset": 5,  "size": 1, "type": "int8",   "description": "Coolant temperature in degrees Celsius, range -40 to 150." },
+    { "name": "throttlePos",  "offset": 6,  "size": 1, "type": "uint8",  "description": "Throttle position percentage, range 0-100." },
+    { "name": "batteryVolt",  "offset": 7,  "size": 2, "type": "uint16", "description": "Battery voltage in millivolts, e.g. 12400 = 12.4V." },
+    { "name": "leanAngle",    "offset": 9,  "size": 2, "type": "int16",  "description": "Current roll/lean angle in tenths of a degree, e.g. 254 = 25.4 degrees." },
+    { "name": "maxLeanRight", "offset": 11, "size": 2, "type": "int16",  "description": "Peak right lean angle in tenths of a degree." },
+    { "name": "maxLeanLeft",  "offset": 13, "size": 2, "type": "int16",  "description": "Peak left lean angle in tenths of a degree." }
+  ]
+}

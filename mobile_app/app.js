@@ -7,6 +7,12 @@ const BLE_SERVICE_UUID           = "4fafc201-1fb5-459e-8fcc-c5c9c331914b";
 const BLE_CHARACTERISTIC_TX_UUID = "beb5483e-36e1-4688-b7f5-ea07361b26a8";
 const BLE_CHARACTERISTIC_RX_UUID = "828919fe-e41c-40ee-b4c6-2c974c2d3345";
 
+// G3.3 -- BLE telemetry packet format, single source of truth:
+// docs/ble_telemetry_packet_schema.json (also mirrored in src/BLETelemetryPacket.h
+// and mobile_app/flutter_app/lib/models/telemetry_data.dart).
+const BLE_PACKET_EXPECTED_VERSION = 1;
+const BLE_PACKET_SIZE_BYTES = 15;
+
 // Main App State
 const appState = {
     connected: false,
@@ -25,6 +31,13 @@ const appState = {
         leanAngle: 0.0,
         maxLeanRight: 0.0,
         maxLeanLeft: 0.0
+    },
+    // G3.3 -- packet-loss measurement via the rolling `seq` field.
+    packetStats: {
+        lastSeq: null,       // null until the first accepted packet
+        receivedCount: 0,
+        lostCount: 0,
+        versionRejectedCount: 0
     }
 };
 
@@ -203,23 +216,43 @@ function setConnectedState(type) {
 }
 
 /**
- * 13-byte Binary BLE Telemetry Decoder.
+ * 15-byte Binary BLE Telemetry Decoder.
  * G1.1 -- Wire format is LITTLE-ENDIAN (ESP32-S3 native byte order); every getX() call
- * below passes `true` for that reason. Layout must stay in sync with
- * src/BLETelemetryPacket.h and mobile_app/flutter_app/lib/models/telemetry_data.dart.
+ * below passes `true` for that reason.
+ * G3.3 -- Layout, versioning and seq-based loss counting are defined in
+ * docs/ble_telemetry_packet_schema.json; must stay in sync with src/BLETelemetryPacket.h
+ * and mobile_app/flutter_app/lib/models/telemetry_data.dart.
  */
 function handleTelemetryNotification(event) {
     const value = event.target.value;
-    if (value.byteLength < 13) return;
+    if (value.byteLength < BLE_PACKET_SIZE_BYTES) return;
 
-    appState.telemetry.rpm          = value.getUint16(0, true);
-    appState.telemetry.speed        = value.getUint8(2);
-    appState.telemetry.coolantTemp  = value.getInt8(3);
-    appState.telemetry.throttlePos  = value.getUint8(4);
-    appState.telemetry.batteryVolt  = value.getUint16(5, true) / 1000.0;
-    appState.telemetry.leanAngle    = value.getInt16(7, true) / 10.0;
-    appState.telemetry.maxLeanRight = value.getInt16(9, true) / 10.0;
-    appState.telemetry.maxLeanLeft  = value.getInt16(11, true) / 10.0;
+    const version = value.getUint8(0);
+    if (version !== BLE_PACKET_EXPECTED_VERSION) {
+        appState.packetStats.versionRejectedCount++;
+        console.warn(`BLE packet rejected: version ${version} != expected ${BLE_PACKET_EXPECTED_VERSION}`);
+        return;
+    }
+
+    const seq = value.getUint8(1);
+    const stats = appState.packetStats;
+    if (stats.lastSeq !== null) {
+        // Rolling 0-255 counter: gap = how many packets landed between the last
+        // seq we saw and this one, minus the one we did receive.
+        const gap = (seq - stats.lastSeq - 1 + 256) % 256;
+        stats.lostCount += gap;
+    }
+    stats.lastSeq = seq;
+    stats.receivedCount++;
+
+    appState.telemetry.rpm          = value.getUint16(2, true);
+    appState.telemetry.speed        = value.getUint8(4);
+    appState.telemetry.coolantTemp  = value.getInt8(5);
+    appState.telemetry.throttlePos  = value.getUint8(6);
+    appState.telemetry.batteryVolt  = value.getUint16(7, true) / 1000.0;
+    appState.telemetry.leanAngle    = value.getInt16(9, true) / 10.0;
+    appState.telemetry.maxLeanRight = value.getInt16(11, true) / 10.0;
+    appState.telemetry.maxLeanLeft  = value.getInt16(13, true) / 10.0;
 
     updateUI();
 }
