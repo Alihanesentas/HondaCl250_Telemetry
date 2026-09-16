@@ -1,4 +1,5 @@
 #include "BLEServerModule.h"
+#include <cstring>
 
 // Custom UUIDs for Honda Telemetry BLE Service & Characteristics
 #define SERVICE_UUID           "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
@@ -65,60 +66,102 @@ bool BLEServerModule::begin() {
     pAdvertising->setMinPreferred(0x12);
     BLEDevice::startAdvertising();
 
+    // G1.2: depth 8 is comfortably more than one event per BLE stack callback burst
+    // (connect/disconnect + a handful of telematics writes) between two main-loop passes.
+    _telematicsQueue = xQueueCreate(8, sizeof(TelematicsEvent));
+    if (_telematicsQueue == nullptr) {
+        Serial.println("[BLE ERROR] Failed to create telematics event queue!");
+    }
+
     _initialized = true;
     return true;
 }
 
 void BLEServerModule::onConnect(BLEServer* pServer) {
-    _deviceConnected = true;
-    if (_pSystemState) {
-        _pSystemState->telematics.phoneConnected = true;
+    // Runs on the BLE stack task -- do not touch SystemState here, just enqueue.
+    TelematicsEvent evt;
+    evt.type = TelematicsEventType::CONNECTION;
+    evt.connected = true;
+    if (_telematicsQueue) {
+        xQueueSend(_telematicsQueue, &evt, 0);
     }
 }
 
 void BLEServerModule::onDisconnect(BLEServer* pServer) {
-    _deviceConnected = false;
-    if (_pSystemState) {
-        _pSystemState->telematics.phoneConnected = false;
+    TelematicsEvent evt;
+    evt.type = TelematicsEventType::CONNECTION;
+    evt.connected = false;
+    if (_telematicsQueue) {
+        xQueueSend(_telematicsQueue, &evt, 0);
     }
 }
 
 void BLEServerModule::onWrite(BLECharacteristic* pCharacteristic) {
+    // Runs on the BLE stack task -- parse into a local, stack-only event and enqueue it.
+    // SystemState itself is only ever written from update() on the main loop task.
     std::string rxValue = pCharacteristic->getValue();
-    if (rxValue.length() > 0 && _pSystemState) {
-        const char* data = rxValue.c_str();
-        
-        const char* songPtr = strstr(data, "SONG:");
-        if (songPtr) {
-            sscanf(songPtr, "SONG:%31[^|]", _pSystemState->telematics.songTitle);
-        }
+    if (rxValue.length() == 0 || !_telematicsQueue) {
+        return;
+    }
 
-        const char* artistPtr = strstr(data, "ARTIST:");
-        if (artistPtr) {
-            sscanf(artistPtr, "ARTIST:%31[^|]", _pSystemState->telematics.artistName);
-        }
+    const char* data = rxValue.c_str();
+    TelematicsEvent evt;
+    evt.type = TelematicsEventType::DATA;
 
-        const char* distPtr = strstr(data, "DIST:");
-        if (distPtr) {
-            int distVal = 0;
-            if (sscanf(distPtr, "DIST:%d", &distVal) == 1) {
-                _pSystemState->telematics.navDistance = (uint16_t)distVal;
-            }
-        }
+    const char* songPtr = strstr(data, "SONG:");
+    if (songPtr) {
+        sscanf(songPtr, "SONG:%31[^|]", evt.songTitle);
+        evt.hasSong = true;
+    }
 
-        const char* iconPtr = strstr(data, "ICON:");
-        if (iconPtr) {
-            int iconVal = 0;
-            if (sscanf(iconPtr, "ICON:%d", &iconVal) == 1) {
-                _pSystemState->telematics.navIconID = (uint8_t)iconVal;
-            }
+    const char* artistPtr = strstr(data, "ARTIST:");
+    if (artistPtr) {
+        sscanf(artistPtr, "ARTIST:%31[^|]", evt.artistName);
+        evt.hasArtist = true;
+    }
+
+    const char* distPtr = strstr(data, "DIST:");
+    if (distPtr) {
+        int distVal = 0;
+        if (sscanf(distPtr, "DIST:%d", &distVal) == 1) {
+            evt.navDistance = (uint16_t)distVal;
+            evt.hasDistance = true;
         }
+    }
+
+    const char* iconPtr = strstr(data, "ICON:");
+    if (iconPtr) {
+        int iconVal = 0;
+        if (sscanf(iconPtr, "ICON:%d", &iconVal) == 1) {
+            evt.navIconID = (uint8_t)iconVal;
+            evt.hasIcon = true;
+        }
+    }
+
+    if (evt.hasSong || evt.hasArtist || evt.hasDistance || evt.hasIcon) {
+        xQueueSend(_telematicsQueue, &evt, 0);
     }
 }
 
 void BLEServerModule::update(SystemState& state) {
-    _pSystemState = &state;
     unsigned long now = millis();
+
+    // Drain every queued BLE-stack-task event here, on the main loop task -- the only
+    // place SystemState.telematics and _deviceConnected are written (G1.2).
+    if (_telematicsQueue) {
+        TelematicsEvent evt;
+        while (xQueueReceive(_telematicsQueue, &evt, 0) == pdTRUE) {
+            if (evt.type == TelematicsEventType::CONNECTION) {
+                _deviceConnected = evt.connected;
+                state.telematics.phoneConnected = evt.connected;
+            } else {
+                if (evt.hasSong)     strncpy(state.telematics.songTitle, evt.songTitle, sizeof(state.telematics.songTitle) - 1);
+                if (evt.hasArtist)   strncpy(state.telematics.artistName, evt.artistName, sizeof(state.telematics.artistName) - 1);
+                if (evt.hasDistance) state.telematics.navDistance = evt.navDistance;
+                if (evt.hasIcon)     state.telematics.navIconID = evt.navIconID;
+            }
+        }
+    }
 
     // Stream real-time binary packet at 10Hz (100ms interval) to connected phone
     if (_deviceConnected && (now - _lastNotify >= 100)) {
