@@ -36,6 +36,9 @@ class TelemetryData {
   }
 
   /// Parses 13-byte binary packet received from BLE notification.
+  /// G1.1 -- Wire format is LITTLE-ENDIAN (ESP32-S3 native byte order); every getX()
+  /// call below passes Endian.little for that reason. Layout must stay in sync with
+  /// src/BLETelemetryPacket.h and mobile_app/app.js (handleTelemetryNotification).
   factory TelemetryData.fromBinaryBuffer(Uint8List bytes) {
     if (bytes.length < 13) return TelemetryData.initial();
 

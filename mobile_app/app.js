@@ -203,11 +203,14 @@ function setConnectedState(type) {
 }
 
 /**
- * 12-byte Binary BLE Telemetry Decoder
+ * 13-byte Binary BLE Telemetry Decoder.
+ * G1.1 -- Wire format is LITTLE-ENDIAN (ESP32-S3 native byte order); every getX() call
+ * below passes `true` for that reason. Layout must stay in sync with
+ * src/BLETelemetryPacket.h and mobile_app/flutter_app/lib/models/telemetry_data.dart.
  */
 function handleTelemetryNotification(event) {
     const value = event.target.value;
-    if (value.byteLength < 12) return;
+    if (value.byteLength < 13) return;
 
     appState.telemetry.rpm          = value.getUint16(0, true);
     appState.telemetry.speed        = value.getUint8(2);
