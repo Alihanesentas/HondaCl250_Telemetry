@@ -54,6 +54,26 @@ void WiFiServerModule::handleRoot() {
     _server.send(200, "text/html", html);
 }
 
+// G4.3 -- songTitle/artistName come straight from a phone-controlled BLE write
+// (see BLEServerModule::onWrite) and used to be interpolated into this endpoint's
+// JSON with no escaping: a '"' or backslash in either field would break the JSON
+// syntax for every client polling /api/telemetry. Escapes '"'/'\\' and drops any
+// control/non-ASCII byte instead of passing it through.
+static String jsonEscape(const char* s) {
+    String out;
+    for (size_t i = 0; s[i] != '\0'; i++) {
+        unsigned char c = (unsigned char)s[i];
+        if (c == '"' || c == '\\') {
+            out += '\\';
+            out += (char)c;
+        } else if (c >= 0x20 && c < 0x7F) {
+            out += (char)c;
+        }
+        // else: drop control/non-ASCII bytes entirely
+    }
+    return out;
+}
+
 void WiFiServerModule::handleTelemetryJson() {
     if (!_pSystemState) {
         _server.send(500, "application/json", "{\"error\":\"State not bound\"}");
@@ -74,8 +94,8 @@ void WiFiServerModule::handleTelemetryJson() {
     json += "\"maxLeanLeft\":" + String(d.maxLeanLeft, 1) + ",";
     json += "\"maxLeanRight\":" + String(d.maxLeanRight, 1) + ",";
     json += "\"phoneConnected\":" + String(t.phoneConnected ? "true" : "false") + ",";
-    json += "\"songTitle\":\"" + String(t.songTitle) + "\",";
-    json += "\"artistName\":\"" + String(t.artistName) + "\"";
+    json += "\"songTitle\":\"" + jsonEscape(t.songTitle) + "\",";
+    json += "\"artistName\":\"" + jsonEscape(t.artistName) + "\"";
     json += "}";
 
     // Set CORS headers for Web dashboards

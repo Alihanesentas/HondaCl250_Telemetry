@@ -8,6 +8,11 @@
 // for why -999 is safe across every field currently rendered.
 constexpr int32_t NEXTION_STALE_SENTINEL = -999;
 
+// G4.3 -- Max characters sanitized/embedded into a single Nextion .txt="..." command
+// by setTxt(). Independent of SystemState's songTitle/artistName[32] bound -- this is
+// a hard cap on what setTxt() will ever emit, regardless of caller.
+constexpr size_t NEXTION_MAX_TEXT_LEN = 31;
+
 /**
  * @brief Nextion HMI display driver module.
  * Sends updated telemetry values over HardwareSerial (UART) using Nextion instructions.

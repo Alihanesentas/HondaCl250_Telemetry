@@ -206,6 +206,12 @@
 **Yap:** Uzunluk sınırı, karakter filtreleme, Nextion komut sonlandırıcısı (`0xFF 0xFF 0xFF`) içeren girdilerin temizlenmesi.
 **Kabul:** Aşırı uzun ve özel karakterli girdiyle sistem kararlı kalıyor.
 
+> ✅ **TAMAMLANDI** — İki gerçek enjeksiyon noktası buldum ve düzelttim:
+> - `src/NextionModule.h` (`NEXTION_MAX_TEXT_LEN`=31), `src/NextionModule.cpp:24-40` (`setTxt()`) — telefon üzerinden BLE ile gelen `songTitle`/`artistName` doğrudan Nextion'ın `"..."` ile tırnaklanan komutuna gömülüyordu; içinde `"` varsa tırnaktan kaçılabiliyor, `0xFF 0xFF 0xFF` varsa komut erken sonlandırılıp yeni bir Nextion komutu enjekte edilebiliyordu. Artık `"`, `\`, kontrol karakterleri ve `0xFF` `_` ile değiştiriliyor, uzunluk 31 karakterle sınırlanıyor.
+> - `src/WiFiServerModule.cpp` (`jsonEscape()` + `handleTelemetryJson()`) — aynı alanlar JSON'a kaçışsız ekleniyordu; bir `"` her `/api/telemetry` istemcisinin JSON.parse'ını bozardı. Artık `"`/`\` kaçışlanıyor, kontrol/ASCII-dışı baytlar atılıyor.
+> - Uzunluk sınırı zaten vardı (`BLEServerModule::onWrite`'taki `sscanf("...%31[^|]...")` formatı) — bu görev karakter filtreleme + terminator temizliğini ekledi.
+> **Doğrulama:** Host'ta (`c++ -std=c++11`) gerçek sanitizasyon mantığıyla üç senaryo test edildi: (1) `"` + gömülü `0xFF 0xFF 0xFF` içeren zararlı string → `Hi__n0.val=99___X` (enjeksiyon etkisiz), (2) `"`/`\`/kontrol karakter içeren string → geçerli kaçışlanmış JSON `A\";\\BC`, (3) 40 karakterlik girdi → 31'e kesildi. Her iki ESP32 ortamı da temiz build oldu.
+
 ### G4.4 — Bilinen açıklar dokümanı
 **Yap:** `SECURITY.md` oluştur: secure boot yok, flash encryption yok, fiziksel erişim koruması yok — bunlar **bilinçli kabul edilmiş prototip sınırları** olarak yazılsın.
 **Not:** Bu doküman, ISO 21434 yaklaşımının öğrenci ölçeğindeki karşılığıdır ve mülakatta değerlidir.

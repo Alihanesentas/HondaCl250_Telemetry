@@ -22,7 +22,22 @@ void NextionModule::setVal(const char* name, int32_t val) {
 }
 
 void NextionModule::setTxt(const char* name, const char* text) {
-    _serial.printf("%s.txt=\"%s\"", name, text);
+    // G4.3 -- text may come straight from a phone-controlled BLE write (songTitle/
+    // artistName, see BLEServerModule::onWrite). It's embedded in a "..."-quoted
+    // Nextion command below, and every Nextion instruction is terminated by any
+    // 0xFF 0xFF 0xFF byte sequence regardless of context. An unfiltered '"' would
+    // let the string break out of its quotes early; an unfiltered 0xFF could
+    // terminate this command and start injecting a new, attacker-chosen one. Strip
+    // anything outside printable 7-bit ASCII (and '"'/'\\') and hard-cap the length.
+    char safe[NEXTION_MAX_TEXT_LEN + 1];
+    size_t i = 0;
+    for (; text[i] != '\0' && i < NEXTION_MAX_TEXT_LEN; i++) {
+        unsigned char c = (unsigned char)text[i];
+        safe[i] = (c == '"' || c == '\\' || c < 0x20 || c >= 0x7F) ? '_' : (char)c;
+    }
+    safe[i] = '\0';
+
+    _serial.printf("%s.txt=\"%s\"", name, safe);
     sendEndCmd();
 }
 
