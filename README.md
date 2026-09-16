@@ -33,7 +33,7 @@ HondaCl250_Telemetry/
 │   ├── HondaCANModule.h/cpp    # Honda DLC/OBD2 CAN bus UDS driver (TWAI)
 │   ├── IMUModule.h/cpp         # MPU6050 accelerometer/gyro lean angle driver
 │   ├── NextionModule.h/cpp     # Nextion HMI display UART driver
-│   ├── BLETelemetryPacket.h    # 12-byte packed binary BLE notification payload
+│   ├── BLETelemetryPacket.h    # 15-byte packed binary BLE notification payload (versioned, see docs/ble_telemetry_packet_schema.json)
 │   ├── BLEServerModule.h/cpp   # ESP32 BLE GATT Server & Telematics handler
 │   ├── WiFiServerModule.h/cpp  # ESP32 SoftAP & HTTP REST/JSON API server
 │   ├── SerialLoggerModule.h/cpp# USB Serial monitor telemetry logger
@@ -80,6 +80,42 @@ HondaCl250_Telemetry/
    ```bash
    flutter run
    ```
+
+---
+
+## ⚠️ Known Limitations
+
+### Lean angle is not true lean angle (G6.2)
+The IMU-based lean/roll angle reading has a fundamental physics limitation, not a
+calibration bug: an accelerometer measures the **combined vector** of gravity and
+centripetal (cornering) acceleration, not gravity alone. In a properly balanced
+turn, a motorcycle leans exactly enough to align itself with that combined
+vector — so the accelerometer reads close to "upright" (near 0°) even at, say,
+45° of actual lean, because the complementary filter has no way to separate
+"the bike is leaned over" from "the bike is accelerating sideways."
+
+**Status:** known and unaddressed. No fix is planned until real ride data
+exists — see "Planned: Block 5" below.
+
+**What's needed to actually fix it:** the vehicle's own CAN-bus speed signal
+(already read by `HondaCANModule`) can be combined with the IMU's raw
+accelerometer/gyro data to estimate and subtract the centripetal component, or
+a full vehicle-model Kalman filter can be built for the same purpose. Neither
+approach can be designed or tuned without first capturing synchronized raw
+IMU + CAN speed data from real riding — the MPU6050 has not been connected to
+real hardware yet (G6.1), so this data does not exist.
+
+**Planned: Block 5** — once G6.1 (IMU hardware bring-up) and G6.3 (real-world
+BLE/Wi-Fi verification) are done at the workshop and a real riding dataset has
+been logged, revisit this with either the speed-based centripetal-correction
+approach or a vehicle-model Kalman filter, whichever the logged data
+justifies.
+
+### Untested components (G6.1, G6.3)
+The MPU6050 IMU code has never been run against real hardware — it has not
+been I2C-address-scanned, sample-rate-verified, or raw-data-logged. Similarly,
+BLE and Wi-Fi have not been end-to-end verified with a real phone. Both remain
+open until real hardware/workshop access is available.
 
 ---
 

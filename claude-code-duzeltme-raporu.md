@@ -262,13 +262,20 @@
 **Durum:** Kod yazılmış, hiç çalıştırılmamış.
 **Yap:** I2C bağlantısı, adres taraması, ham veri okuma, örnekleme hızı doğrulama. Filtreye geçmeden önce **ham veriyi kaydet.**
 
+> ⏸️ **BEKLEMEDE — donanım gerekiyor.** Gerçek MPU6050 I2C hattına bağlı değilken bu görev yapılamaz (I2C adres taraması, ham veri okuma — hepsi fiziksel sensör gerektiriyor). Atölyede yapılacak.
+
 ### G6.2 — Lean angle: bilinen tasarım sorunu ⚠️
 **Problem:** İvmeölçer, yerçekimi ile merkezkaç ivmesinin **bileşkesini** ölçer. Dengeli bir virajda motosiklet zaten bu bileşkeyle hizalanır — yani tamamlayıcı filtre 45°'lik bir virajda ~0° okur. Bu bir ayar hatası değil, yöntemin sınırı.
 **Şimdilik yap:** Bunu `README.md`'de bilinen sınırlama olarak yaz. Ham IMU + CAN hızı verisini senkron kaydet.
 **Sonra (Blok 5):** Hız bilgisiyle merkezkaç bileşeni kestirip çıkaran bir yaklaşım veya araç modelli Kalman. Kaydedilmiş gerçek veri olmadan bu tasarlanamaz.
 
+> ✅ **README.md kısmı TAMAMLANDI** — `README.md`'ye "⚠️ Known Limitations" bölümü eklendi: sorunun fiziksel nedeni, neden şimdi düzeltilemeyeceği, Blok 5'te ne yapılacağı (hız-bazlı merkezkaç düzeltmesi veya araç-modelli Kalman) açıkça yazıldı.
+> ⏸️ **"Ham IMU + CAN hızı verisini senkron kaydet" kısmı BEKLEMEDE — donanım gerekiyor.** Kayıt yapılabilmesi için önce G6.1 (gerçek IMU bağlantısı) tamamlanmalı; IMU donanımı yokken senkron kayıt mantıksız (kaydedilecek gerçek IMU verisi yok).
+
 ### G6.3 — BLE ve Wi-Fi devreye alma
 **Yap:** Gerçek telefonla uçtan uca doğrulama. G0.1 enstrümantasyonu açıkken yap — bu yolların döngü zamanlamasına etkisini ölç.
+
+> ⏸️ **BEKLEMEDE — donanım/gerçek telefon gerekiyor.** G4.2 (BLE bonding) ve G4.1 (WiFi AP tetikleyicileri) kod tarafında hazır; uçtan uca doğrulama ancak gerçek telefonla, atölyede yapılabilir.
 
 ---
 
