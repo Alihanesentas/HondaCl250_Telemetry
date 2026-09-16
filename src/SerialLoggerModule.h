@@ -16,6 +16,7 @@ public:
     SerialLoggerModule(unsigned long printIntervalMs = 1000);
     bool begin() override;
     void update(SystemState& state) override;
+    bool isHealthy() const override { return true; }
 };
 
 #endif // SERIAL_LOGGER_MODULE_H

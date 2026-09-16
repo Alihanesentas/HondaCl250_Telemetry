@@ -25,9 +25,11 @@ bool HondaCANModule::begin() {
         sendFrame29(0x02, 0x10, 0x03);
         sendFrame11(0x02, 0x10, 0x03);
         delay(50);
+        _initialized = true;
         return true;
     }
     Serial.println("[CAN ERROR] Failed to initialize TWAI CAN bus driver! Check TX/RX pins.");
+    _initialized = false;
     return false;
 }
 

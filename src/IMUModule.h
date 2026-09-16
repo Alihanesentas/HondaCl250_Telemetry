@@ -21,6 +21,7 @@ public:
     IMUModule(int sdaPin, int sclPin, uint8_t addr = 0x68);
     bool begin() override;
     void update(SystemState& state) override;
+    bool isHealthy() const override { return _initialized; }
 };
 
 #endif // IMU_MODULE_H

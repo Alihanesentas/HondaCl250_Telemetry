@@ -6,6 +6,7 @@ NextionModule::NextionModule(HardwareSerial& serial, int8_t rxPin, int8_t txPin)
 bool NextionModule::begin() {
     // HardwareSerial::begin(baud, config, rxPin, txPin)
     _serial.begin(115200, SERIAL_8N1, _rxPin, _txPin);
+    _initialized = true;
     return true;
 }
 

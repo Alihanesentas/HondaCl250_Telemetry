@@ -12,6 +12,7 @@ class HondaCANModule : public IModule {
 private:
     gpio_num_t _txPin;
     gpio_num_t _rxPin;
+    bool _initialized = false;
     unsigned long _lastKeepAlive = 0;
     unsigned long _lastFastReq = 0;
     unsigned long _lastSlowReq = 0;
@@ -36,6 +37,7 @@ public:
     HondaCANModule(gpio_num_t txPin, gpio_num_t rxPin);
     bool begin() override;
     void update(SystemState& state) override;
+    bool isHealthy() const override { return _initialized; }
 };
 
 #endif // HONDA_CAN_MODULE_H

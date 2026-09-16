@@ -85,6 +85,14 @@ unsigned long lastTimingReport = 0;
 const unsigned long TIMING_REPORT_INTERVAL_MS = 10000;
 
 // ============================================================================
+// G0.2 -- MODULE HEALTH TRACKING
+// A module whose begin() fails (or that later reports unhealthy) is excluded
+// from update() so one broken peripheral (e.g. IMU not wired) cannot stall
+// or crash the modules that are working.
+// ============================================================================
+bool moduleActive[MODULE_COUNT];
+
+// ============================================================================
 // SETUP & MAIN LOOP
 // ============================================================================
 void setup() {
@@ -101,10 +109,12 @@ void setup() {
 
     // Initialize all registered system modules
     for (uint8_t i = 0; i < MODULE_COUNT; i++) {
-        if (modules[i]->begin()) {
-            Serial.printf(" [OK] Module [%d] successfully initialized.\n", i);
+        moduleActive[i] = modules[i]->begin();
+        if (moduleActive[i]) {
+            Serial.printf(" [OK] Module [%d] %s successfully initialized.\n", i, MODULE_NAMES[i]);
         } else {
-            Serial.printf(" [WARNING] Module [%d] failed to initialize!\n", i);
+            Serial.printf(" [WARNING] Module [%d] %s failed to initialize -- %s unavailable, excluded from update loop.\n",
+                i, MODULE_NAMES[i], MODULE_NAMES[i]);
         }
     }
 
@@ -115,8 +125,20 @@ void loop() {
     digitalWrite(DEBUG_LOOP_PIN, HIGH);
     int64_t loopStartUs = esp_timer_get_time();
 
-    // Update all system modules asynchronously with binding to global SystemState
+    // Update all system modules asynchronously with binding to global SystemState.
+    // Modules that failed begin() (or later report unhealthy) are skipped so one
+    // broken peripheral cannot stall the ones that are working (G0.2).
     for (uint8_t i = 0; i < MODULE_COUNT; i++) {
+        bool healthyNow = modules[i]->isHealthy();
+        if (healthyNow != moduleActive[i]) {
+            moduleActive[i] = healthyNow;
+            Serial.printf(" [HEALTH] Module [%d] %s is now %s.\n",
+                i, MODULE_NAMES[i], healthyNow ? "healthy" : "unhealthy -- excluded from update loop");
+        }
+        if (!moduleActive[i]) {
+            continue;
+        }
+
         int64_t moduleStartUs = esp_timer_get_time();
         modules[i]->update(globalState);
         moduleTiming[i].record((uint32_t)(esp_timer_get_time() - moduleStartUs));

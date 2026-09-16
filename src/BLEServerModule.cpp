@@ -65,6 +65,7 @@ bool BLEServerModule::begin() {
     pAdvertising->setMinPreferred(0x12);
     BLEDevice::startAdvertising();
 
+    _initialized = true;
     return true;
 }
 

@@ -20,6 +20,7 @@ private:
     BLECharacteristic* _pTxCharacteristic = nullptr;
     BLECharacteristic* _pRxCharacteristic = nullptr;
 
+    bool _initialized = false;
     bool _deviceConnected = false;
     bool _oldDeviceConnected = false;
     unsigned long _lastNotify = 0;
@@ -32,6 +33,7 @@ public:
 
     bool begin() override;
     void update(SystemState& state) override;
+    bool isHealthy() const override { return _initialized; }
 
     // BLEServerCallbacks
     void onConnect(BLEServer* pServer) override;

@@ -21,6 +21,7 @@ bool WiFiServerModule::begin() {
     _server.on("/api/telemetry", std::bind(&WiFiServerModule::handleTelemetryJson, this));
 
     _server.begin();
+    _initialized = true;
     return true;
 }
 

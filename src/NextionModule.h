@@ -12,6 +12,7 @@ private:
     HardwareSerial& _serial;
     int8_t _rxPin;
     int8_t _txPin;
+    bool _initialized = false;
     unsigned long _lastRender = 0;
 
     /**
@@ -33,6 +34,7 @@ public:
     NextionModule(HardwareSerial& serial, int8_t rxPin, int8_t txPin);
     bool begin() override;
     void update(SystemState& state) override;
+    bool isHealthy() const override { return _initialized; }
 };
 
 #endif // NEXTION_MODULE_H

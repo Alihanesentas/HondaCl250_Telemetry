@@ -13,6 +13,7 @@
 class WiFiServerModule : public IModule {
 private:
     WebServer _server;
+    bool _initialized = false;
     unsigned long _lastUpdate = 0;
     SystemState* _pSystemState = nullptr;
 
@@ -32,6 +33,7 @@ public:
 
     bool begin() override;
     void update(SystemState& state) override;
+    bool isHealthy() const override { return _initialized; }
 };
 
 #endif // WIFI_SERVER_MODULE_H

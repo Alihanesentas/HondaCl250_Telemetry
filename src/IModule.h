@@ -23,6 +23,13 @@ public:
      * @param state Reference to the global SystemState object.
      */
     virtual void update(SystemState& state) = 0;
+
+    /**
+     * @brief Reports whether the module initialized correctly and is safe to update().
+     * main.cpp excludes unhealthy modules from the update loop after begin() runs.
+     * @return true if the module is operating normally.
+     */
+    virtual bool isHealthy() const = 0;
 };
 
 #endif // IMODULE_H
