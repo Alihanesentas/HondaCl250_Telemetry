@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <esp_timer.h>
 
 #include "SystemState.h"
 #include "IModule.h"
@@ -20,6 +21,10 @@
 
 #define UART2_TX_PIN    GPIO_NUM_17
 #define UART2_RX_PIN    GPIO_NUM_18
+
+// Free GPIO used purely for loop-timing observation (oscilloscope / logic analyzer probe).
+// Not wired to any peripheral above (4,5,1,2,17,18 are taken).
+#define DEBUG_LOOP_PIN  GPIO_NUM_8
 
 // Hardware Serial 2 Instance for Nextion HMI Display
 HardwareSerial NextionSerial(2);
@@ -50,6 +55,34 @@ IModule* modules[] = {
 };
 
 const uint8_t MODULE_COUNT = sizeof(modules) / sizeof(modules[0]);
+const char* MODULE_NAMES[MODULE_COUNT] = {"CAN", "IMU", "Nextion", "BLE", "WiFi", "Logger"};
+
+// ============================================================================
+// G0.1 -- LOOP TIMING INSTRUMENTATION
+// Tracks per-module update() duration (esp_timer_get_time, microsecond resolution)
+// and prints min/avg/max to Serial every 10s. DEBUG_LOOP_PIN pulses HIGH for the
+// duration of one full loop() pass so it can be probed with a scope/logic analyzer.
+// ============================================================================
+struct TimingStats {
+    uint32_t minUs = UINT32_MAX;
+    uint32_t maxUs = 0;
+    uint64_t sumUs = 0;
+    uint32_t samples = 0;
+
+    void record(uint32_t us) {
+        if (us < minUs) minUs = us;
+        if (us > maxUs) maxUs = us;
+        sumUs += us;
+        samples++;
+    }
+
+    void reset() { *this = TimingStats(); }
+};
+
+TimingStats moduleTiming[MODULE_COUNT];
+TimingStats loopTiming;
+unsigned long lastTimingReport = 0;
+const unsigned long TIMING_REPORT_INTERVAL_MS = 10000;
 
 // ============================================================================
 // SETUP & MAIN LOOP
@@ -62,6 +95,9 @@ void setup() {
     Serial.println("\n==================================================");
     Serial.println("   HONDA CL250 DUAL-TRANSPORT TELEMETRY STARTING  ");
     Serial.println("==================================================");
+
+    pinMode(DEBUG_LOOP_PIN, OUTPUT);
+    digitalWrite(DEBUG_LOOP_PIN, LOW);
 
     // Initialize all registered system modules
     for (uint8_t i = 0; i < MODULE_COUNT; i++) {
@@ -76,8 +112,44 @@ void setup() {
 }
 
 void loop() {
+    digitalWrite(DEBUG_LOOP_PIN, HIGH);
+    int64_t loopStartUs = esp_timer_get_time();
+
     // Update all system modules asynchronously with binding to global SystemState
     for (uint8_t i = 0; i < MODULE_COUNT; i++) {
+        int64_t moduleStartUs = esp_timer_get_time();
         modules[i]->update(globalState);
+        moduleTiming[i].record((uint32_t)(esp_timer_get_time() - moduleStartUs));
+    }
+
+    loopTiming.record((uint32_t)(esp_timer_get_time() - loopStartUs));
+    digitalWrite(DEBUG_LOOP_PIN, LOW);
+
+    unsigned long now = millis();
+    if (now - lastTimingReport >= TIMING_REPORT_INTERVAL_MS) {
+        lastTimingReport = now;
+        Serial.println("\n---- LOOP TIMING (last 10s, microseconds) ----");
+        for (uint8_t i = 0; i < MODULE_COUNT; i++) {
+            TimingStats& t = moduleTiming[i];
+            if (t.samples > 0) {
+                Serial.printf("  [%-8s] min=%6lu  avg=%6lu  max=%6lu  (n=%lu)\n",
+                    MODULE_NAMES[i],
+                    (unsigned long)t.minUs,
+                    (unsigned long)(t.sumUs / t.samples),
+                    (unsigned long)t.maxUs,
+                    (unsigned long)t.samples);
+            }
+            t.reset();
+        }
+        if (loopTiming.samples > 0) {
+            Serial.printf("  [%-8s] min=%6lu  avg=%6lu  max=%6lu  (n=%lu)\n",
+                "LOOP",
+                (unsigned long)loopTiming.minUs,
+                (unsigned long)(loopTiming.sumUs / loopTiming.samples),
+                (unsigned long)loopTiming.maxUs,
+                (unsigned long)loopTiming.samples);
+        }
+        loopTiming.reset();
+        Serial.println("-----------------------------------------------\n");
     }
 }
