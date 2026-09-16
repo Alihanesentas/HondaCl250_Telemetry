@@ -24,6 +24,19 @@ public:
      * @return true if the module is operating normally.
      */
     virtual bool isHealthy() const = 0;
+
+    /**
+     * @brief G3.4 -- Declares how often main.cpp should call update(), centralizing
+     * scheduling policy instead of each module doing its own internal millis() gate.
+     * Default 0 means "every loop pass, no throttling" -- correct for any module whose
+     * own work must not be delayed (CAN/UDS timeouts, IMU sample rate, HTTP
+     * responsiveness, BLE queue draining): those modules simply don't override this.
+     * Only override with a period for modules that (a) may safely be throttled below
+     * loop rate and (b) have no other, finer-grained internal cadence that would be
+     * distorted by delaying the whole update() call.
+     * @return Minimum milliseconds between update() calls, or 0 for every pass.
+     */
+    virtual uint32_t getPeriodMs() const { return 0; }
 };
 
 /**

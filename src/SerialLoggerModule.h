@@ -9,7 +9,6 @@
  */
 class SerialLoggerModule : public IConsumerModule {
 private:
-    unsigned long _lastPrint = 0;
     unsigned long _printIntervalMs;
 
 public:
@@ -17,6 +16,9 @@ public:
     bool begin() override;
     void update(const SystemState& state) override;
     bool isHealthy() const override { return true; }
+    // G3.4 -- scheduling now lives in main.cpp instead of an internal _lastPrint
+    // millis() gate; the configured interval is just reported here.
+    uint32_t getPeriodMs() const override { return _printIntervalMs; }
 };
 
 #endif // SERIAL_LOGGER_MODULE_H

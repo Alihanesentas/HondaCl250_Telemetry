@@ -123,6 +123,18 @@ bool producerActive[PRODUCER_COUNT];
 bool consumerActive[CONSUMER_COUNT];
 
 // ============================================================================
+// G3.4 -- CENTRALIZED SCHEDULING
+// Each module declares its own required cadence via getPeriodMs() (IModule.h);
+// main.cpp is the single place that decides, from that declaration, whether this
+// pass is due to call update() -- replacing the old pattern of every module doing
+// its own internal millis() comparison. Modules that need every-pass execution
+// (CAN/UDS timing, IMU sample rate, WiFi HTTP responsiveness, BLE queue draining)
+// simply report period 0 (IModule's default) and are unaffected.
+// ============================================================================
+unsigned long producerLastRunMs[PRODUCER_COUNT] = {0};
+unsigned long consumerLastRunMs[CONSUMER_COUNT] = {0};
+
+// ============================================================================
 // Small shared helpers -- refactored out to deduplicate the producer/consumer
 // loops below (begin+log, health-check+log, timing-row printing were each
 // repeated once per group with identical logic).
@@ -146,6 +158,16 @@ bool checkHealthTransition(IModule* mod, bool& activeFlag, const char* roleLabel
             roleLabel, index, name, healthyNow ? "healthy" : "unhealthy -- excluded from update loop");
     }
     return activeFlag;
+}
+
+// G3.4 -- centralized scheduling check: true (and advances lastRunMs) if `periodMs`
+// has elapsed since this module's last run, or if periodMs is 0 (every pass).
+bool isDue(unsigned long now, unsigned long& lastRunMs, uint32_t periodMs) {
+    if (periodMs > 0 && (now - lastRunMs) < periodMs) {
+        return false;
+    }
+    lastRunMs = now;
+    return true;
 }
 
 void printTimingRow(const char* name, TimingStats& t) {
@@ -212,12 +234,17 @@ void setup() {
 void loop() {
     digitalWrite(DEBUG_LOOP_PIN, HIGH);
     int64_t loopStartUs = esp_timer_get_time();
+    unsigned long now = millis();
 
     // G3.1 -- producers run first so every consumer below sees this pass's freshest
     // data. Modules that failed begin() (or later report unhealthy) are skipped so one
-    // broken peripheral cannot stall the ones that are working (G0.2).
+    // broken peripheral cannot stall the ones that are working (G0.2). G3.4 -- each
+    // module's own getPeriodMs() decides whether it's actually due this pass.
     for (uint8_t i = 0; i < PRODUCER_COUNT; i++) {
         if (!checkHealthTransition(producers[i], producerActive[i], "Producer", i, PRODUCER_NAMES[i])) {
+            continue;
+        }
+        if (!isDue(now, producerLastRunMs[i], producers[i]->getPeriodMs())) {
             continue;
         }
 
@@ -228,6 +255,9 @@ void loop() {
 
     for (uint8_t i = 0; i < CONSUMER_COUNT; i++) {
         if (!checkHealthTransition(consumers[i], consumerActive[i], "Consumer", i, CONSUMER_NAMES[i])) {
+            continue;
+        }
+        if (!isDue(now, consumerLastRunMs[i], consumers[i]->getPeriodMs())) {
             continue;
         }
 
@@ -243,7 +273,6 @@ void loop() {
     // (blocking I/O, infinite loop) this stops happening and TWDT resets the board.
     esp_task_wdt_reset();
 
-    unsigned long now = millis();
     if (now - lastTimingReport >= TIMING_REPORT_INTERVAL_MS) {
         lastTimingReport = now;
         Serial.println("\n---- LOOP TIMING (last 10s, microseconds) ----");

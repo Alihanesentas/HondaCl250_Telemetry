@@ -18,7 +18,6 @@ private:
     int8_t _rxPin;
     int8_t _txPin;
     bool _initialized = false;
-    unsigned long _lastRender = 0;
 
     /**
      * @brief Transmits Nextion instruction terminator sequence (0xFF 0xFF 0xFF).
@@ -40,6 +39,9 @@ public:
     bool begin() override;
     void update(const SystemState& state) override;
     bool isHealthy() const override { return _initialized; }
+    // G3.4 -- throttled from 10Hz loop rate to avoid over-saturating UART bandwidth;
+    // scheduling now lives in main.cpp instead of an internal _lastRender millis() gate.
+    uint32_t getPeriodMs() const override { return 100; }
 };
 
 #endif // NEXTION_MODULE_H

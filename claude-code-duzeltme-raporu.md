@@ -174,6 +174,12 @@
 **Yap:** `IModule`'e periyot bilgisi ekle; çizelgeleme `main.cpp`'de tek yerde yapılsın.
 **Not:** FreeRTOS task ayrımı **bu fazda yapılmayacak.** G0.1 ölçümü gerçekten sorun gösterirse ayrı bir tur olarak ele alınır.
 
+> ✅ **TAMAMLANDI** — `src/IModule.h:39` (`virtual uint32_t getPeriodMs() const { return 0; }`, varsayılan = her turda çalıştır). Önce her modülü analiz ettim: sadece **NextionModule** (100ms) ve **SerialLoggerModule** (`_printIntervalMs`) güvenle main.cpp'ye taşınabilecek, kendi içinde başka bir kademeli zamanlaması olmayan saf periyodik modüller. CAN/IMU/WiFi/BLE **dokunulmadı** (dönem 0 kaldı) — her turda çalışmaları gerekiyor (CAN rx kuyruğu, IMU örnekleme hızı, WiFi HTTP yanıt hızı, BLE kuyruk boşaltma) ve zaten kendi iç UDS/protokol zamanlamaları var (G1.3-G2.4'te sertleştirilmiş, dokunulmayacak kod).
+> - `src/NextionModule.h/.cpp` — `getPeriodMs()` override (100), `_lastRender` iç kontrolü kaldırıldı.
+> - `src/SerialLoggerModule.h/.cpp` — `getPeriodMs()` override (`_printIntervalMs`), `_lastPrint` iç kontrolü kaldırıldı.
+> - `src/main.cpp:165-171` (`isDue()` yardımcısı), `:247` (üretici döngüsü), `:260` (tüketici döngüsü) — zamanlama artık tek yerde, modülün `getPeriodMs()` beyanına göre.
+> **Doğrulama:** Her iki ortam (`esp32-s3-devkitc-1`, `-mock`) temiz build oldu.
+
 ---
 
 ## FAZ 4 — Güvenlik
