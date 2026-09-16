@@ -18,6 +18,15 @@ private:
     unsigned long _lastSlowReq = 0;
     uint8_t _slowSeq = 0;
 
+    // G1.3 -- Bus-off recovery state. Recovery attempts back off exponentially
+    // (1s, 2s, 4s ... capped at 30s) instead of hammering twai_initiate_recovery()
+    // every single loop pass while the bus stays off.
+    bool _busOff = false;
+    unsigned long _lastRecoveryAttempt = 0;
+    unsigned long _recoveryBackoffMs = 1000;
+    uint32_t _busOffEventCount = 0;
+    static const unsigned long RECOVERY_BACKOFF_MAX_MS = 30000;
+
     /**
      * @brief Transmits a 29-bit Extended CAN frame for Honda UDS queries ($18DA10F1).
      */

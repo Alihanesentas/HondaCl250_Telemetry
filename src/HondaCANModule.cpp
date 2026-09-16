@@ -72,14 +72,38 @@ void HondaCANModule::requestDID(uint16_t did) {
 void HondaCANModule::update(SystemState& state) {
     unsigned long now = millis();
 
-    // 1. TWAI Bus-Off Auto Recovery Check
+    // 1. TWAI Bus-Off Auto Recovery Check (G1.3 -- exponential backoff, event logging)
     twai_status_info_t status;
     if (twai_get_status_info(&status) == ESP_OK) {
         if (status.state == TWAI_STATE_BUS_OFF) {
-            Serial.println("[CAN WARNING] TWAI Bus-Off detected! Attempting auto-recovery...");
-            twai_initiate_recovery();
+            if (!_busOff) {
+                // Just entered bus-off: log once, reset backoff, attempt immediately.
+                _busOff = true;
+                _busOffEventCount++;
+                _recoveryBackoffMs = 1000;
+                _lastRecoveryAttempt = 0;
+                Serial.printf("[CAN WARNING] TWAI Bus-Off detected (event #%lu, tx_err=%d, rx_err=%d). Starting recovery...\n",
+                    (unsigned long)_busOffEventCount, status.tx_error_counter, status.rx_error_counter);
+            }
+
+            if (now - _lastRecoveryAttempt >= _recoveryBackoffMs) {
+                _lastRecoveryAttempt = now;
+                Serial.printf("[CAN WARNING] Bus-Off recovery attempt (next retry in %lu ms if this fails)...\n",
+                    _recoveryBackoffMs);
+                twai_initiate_recovery();
+                _recoveryBackoffMs = min(_recoveryBackoffMs * 2, RECOVERY_BACKOFF_MAX_MS);
+            }
         } else if (status.state == TWAI_STATE_STOPPED) {
+            // twai_initiate_recovery() lands the driver here once recovery completes.
+            if (_busOff) {
+                Serial.println("[CAN SUCCESS] TWAI Bus-Off recovery complete, restarting driver.");
+                _busOff = false;
+                _recoveryBackoffMs = 1000;
+            }
             twai_start();
+        } else if (status.state == TWAI_STATE_RUNNING && _busOff) {
+            _busOff = false;
+            _recoveryBackoffMs = 1000;
         }
     }
 
