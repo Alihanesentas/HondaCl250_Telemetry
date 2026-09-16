@@ -27,6 +27,14 @@ private:
     uint32_t _busOffEventCount = 0;
     static const unsigned long RECOVERY_BACKOFF_MAX_MS = 30000;
 
+    // G2.1 -- Negative response (NRC, 0x7F) bookkeeping.
+    uint32_t _nrcCount = 0;
+
+    /**
+     * @brief Human-readable name for a UDS Negative Response Code (ISO 14229-1 Annex A).
+     */
+    static const char* nrcName(uint8_t nrc);
+
     /**
      * @brief Transmits a 29-bit Extended CAN frame for Honda UDS queries ($18DA10F1).
      */

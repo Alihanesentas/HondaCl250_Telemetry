@@ -63,6 +63,25 @@ void HondaCANModule::sendFrame11(uint8_t d0, uint8_t d1, uint8_t d2, uint8_t d3)
     twai_transmit(&txMsg, pdMS_TO_TICKS(5));
 }
 
+const char* HondaCANModule::nrcName(uint8_t nrc) {
+    switch (nrc) {
+        case 0x10: return "generalReject";
+        case 0x11: return "serviceNotSupported";
+        case 0x12: return "subFunctionNotSupported";
+        case 0x13: return "incorrectMessageLengthOrInvalidFormat";
+        case 0x21: return "busyRepeatRequest";
+        case 0x22: return "conditionsNotCorrect";
+        case 0x24: return "requestSequenceError";
+        case 0x31: return "requestOutOfRange";
+        case 0x33: return "securityAccessDenied";
+        case 0x35: return "invalidKey";
+        case 0x78: return "responsePending";
+        case 0x7E: return "subFunctionNotSupportedInActiveSession";
+        case 0x7F: return "serviceNotSupportedInActiveSession";
+        default:   return "unknownNRC";
+    }
+}
+
 void HondaCANModule::requestDID(uint16_t did) {
     // Send request using both 29-bit extended and 11-bit standard CAN headers
     sendFrame29(0x03, 0x22, (did >> 8) & 0xFF, did & 0xFF);
@@ -165,6 +184,23 @@ void HondaCANModule::update(SystemState& state) {
                     }
                     state.engine.batteryVoltageUpdatedMs = now;
                     break;
+            }
+        } else if (isUDSResponse && rxMsg.data[1] == 0x7F && rxMsg.data_length_code >= 4) {
+            // G2.1 -- Negative response: [PCI][0x7F][echoed SID][NRC]. The ECU does not
+            // echo back which DID triggered this, so on 0x78 (responsePending) both
+            // request timers are pushed out uniformly rather than retrying immediately.
+            // G2.2's per-request state machine will correlate this to the exact DID.
+            uint8_t echoedSid = rxMsg.data[2];
+            uint8_t nrc = rxMsg.data[3];
+            _nrcCount++;
+
+            if (nrc == 0x78) {
+                _lastFastReq = now;
+                _lastSlowReq = now;
+                Serial.printf("[UDS] NRC 0x78 responsePending for SID 0x%02X -- extending wait, not retrying yet.\n", echoedSid);
+            } else {
+                Serial.printf("[UDS WARNING] Negative response: SID=0x%02X NRC=0x%02X (%s) [total NRCs=%lu]\n",
+                    echoedSid, nrc, nrcName(nrc), (unsigned long)_nrcCount);
             }
         }
     }

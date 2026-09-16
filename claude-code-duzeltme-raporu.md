@@ -109,6 +109,7 @@
 ## FAZ 2 — UDS sağlamlığı
 
 ### G2.1 — Negatif yanıt (NRC) işleme
+> ✅ **TAMAMLANDI** — `src/HondaCANModule.h` (`nrcName()`, `_nrcCount`), `src/HondaCANModule.cpp` (rx döngüsünde `0x7F` dalı). `0x78` özel olarak ele alınıyor (istek tekrarlanmadan bekleme uzatılıyor); diğer NRC'ler sayılıp adıyla loglanıyor. Build ile doğrulandı. Not: ECU hangi DID'in reddedildiğini yanıtta echo etmiyor, bu yüzden `0x78` her iki zamanlayıcıyı da öteliyor — DID-bazlı hassas korelasyon G2.2'nin durum makinesiyle gelecek.
 **Problem:** Sadece mutlu yol kodlanmış görünüyor.
 **Yap:** `0x7F` yanıtlarını ayrıştır ve NRC koduna göre davran. Özellikle **`0x78` (responsePending)**: bekleme süresini uzat, isteği tekrarlama. Diğer NRC'leri say ve logla.
 **Kabul:** Bilinmeyen bir DID istendiğinde sistem NRC'yi doğru raporluyor ve kilitlenmiyor.
