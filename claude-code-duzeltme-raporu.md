@@ -234,13 +234,24 @@
 **Yap:** Mock CAN üstünde: DID ayrıştırma, ölçek/offset dönüşümleri, NRC işleme, zaman aşımı, durum makinesi geçişleri. Native ortamda (`pio test -e native`) koşsun.
 **Kabul:** `test/` klasörü dolu; testler donanımsız geçiyor.
 
+> ⚠️ **KISMEN ENGELLİ — G3.2'nin geri alınmasının doğrudan sonucu.** Bu görevin ön koşulu olan `ICanBus` enjeksiyonu, kullanıcı talimatıyla geri alındı (G3.2 notuna bak: "normal data aldığımız katmanı değiştirme"). Bu yüzden `HondaCANModule`'ün UDS durum makinesi/NRC işleme/zaman aşımı mantığı **native olarak birim test edilemiyor** — bunu yapmanın tek yolu (bir CAN soyutlaması enjekte etmek) kasıtlı olarak dışarıda bırakıldı. Bu açık bir teknik borç, gizlemiyorum: **HondaCANModule.cpp'nin protokol mantığı şu an hiçbir otomatik testle korunmuyor**, sadece build-time derleme kontrolü ve donanımda manuel gözlemle doğrulanıyor.
+> Bunun yerine, dokunmadan yapılabilecek kısmı tamamladım: `test/test_native/test_main.cpp` — `SystemState.h`'in `isStale()` fonksiyonu için 4 test (hiç güncellenmemiş veri, taze veri, bayat veri, özel eşik). Bu, HondaCANModule'e hiç dokunmadan, dosyanın kendisini test ediyor.
+> **Eğer ileride gerçek UDS state machine testi istersen**, tek yol G3.2'nin orijinal HAL yaklaşımını (ICanBus enjeksiyonu) tekrar gündeme almak — bu senin onayına bağlı, ben tek taraflı yapmadım.
+
 ### G5.2 — Paket serileştirme testleri
 **Yap:** `BLETelemetryPacket` serileştirme/ayrıştırma testleri, endianness dahil.
 **Kabul:** Bilinen bayt dizileri beklenen değerlere çözülüyor.
 
+> ✅ **TAMAMLANDI** — `test/test_native/test_main.cpp` (4 test: boyut+offset kontrolü `offsetof()` ile, alan değerleri, little-endian bayt düzeni doğrulaması `reinterpret_cast` ile ham bayt okuyarak). `test/native_stubs/Arduino.h` — sadece `millis()`/`test_setMillis()` içeren minimal stub, native platformda `SystemState.h`/`BLETelemetryPacket.h`'i gerçek ESP32 framework'ü olmadan derlemeyi sağlıyor.
+> Ayrıca **mevcut ama bozuk olan** `test/test_main.cpp`'yi buldum ve düzelttim: hâlâ G3.3 öncesi 12 baytlık paketi test ediyordu (`TEST_ASSERT_EQUAL(12, sizeof(BLETelemetryPacket))`), G3.3 sonrası bu **başarısız olurdu**. `test/test_embedded/test_main.cpp`'ye taşıdım ve 15 bayt + version/seq'e güncelledim (bu suite donanım gerektiriyor, atölyede `pio test -e esp32-s3-devkitc-1` ile koşulacak).
+> **Doğrulama:** `pio test -e native` → **8/8 test PASSED**, donanımsız, Mac'te ~1-6 saniyede çalışıyor.
+
 ### G5.3 — CI
 **Yap:** GitHub Actions: her push'ta derleme + native testler.
 **Kabul:** Repoda yeşil build rozeti var.
+
+> ✅ **TAMAMLANDI** — `.github/workflows/ci.yml`: her push/PR'da (1) `esp32-s3-devkitc-1` build, (2) `esp32-s3-devkitc-1-mock` build, (3) `pio test -e native`. G4.1'in `AP_PASSWORD` build-flag gereksinimini CI'da karşılamak için workflow, commit edilmeyen geçici bir `platformio_local.ini` (sadece build doğrulaması için dummy parola, asla gerçek donanıma yüklenmiyor) oluşturuyor.
+> **Doğrulama:** Workflow'un tam reçetesini (placeholder parola oluşturma + 3 adım) yerel olarak, kullanıcının gerçek `platformio_local.ini`'sini geçici yedekleyip birebir simüle ederek çalıştırdım — üçü de başarılı, sonra kullanıcının gerçek parolası geri yüklendi. GitHub Actions'ın kendisi bu ortamdan tetiklenemiyor (CI runner'a erişimim yok), bu yüzden "yeşil rozet" ancak push sonrası GitHub'da görülebilir — ama workflow'un içeriği ve her adımı burada gerçek şekilde test edildi.
 
 ---
 

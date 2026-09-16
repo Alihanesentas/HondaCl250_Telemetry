@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cache PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio
+          key: ${{ runner.os }}-platformio-${{ hashFiles('platformio.ini') }}
+
+      - name: Install PlatformIO
+        run: pip install --upgrade platformio
+
+      # G4.1 requires AP_PASSWORD from a gitignored platformio_local.ini that does
+      # not exist in CI. This is a build-verification-only placeholder -- it is
+      # never flashed to real hardware and never committed. Real deployments use
+      # their own local platformio_local.ini (see platformio_local.ini.example).
+      - name: Provide CI-only build password
+        run: |
+          echo '[env:esp32-s3-devkitc-1]' > platformio_local.ini
+          echo 'build_flags = -D AP_PASSWORD=\"CIBuildOnlyPlaceholder123\"' >> platformio_local.ini
+
+      - name: Build firmware (real CAN/UDS)
+        run: pio run -e esp32-s3-devkitc-1
+
+      - name: Build firmware (mock telemetry)
+        run: pio run -e esp32-s3-devkitc-1-mock
+
+      # test/test_embedded needs Unity running on the physical board over USB and
+      # cannot run in CI -- see [env:esp32-s3-devkitc-1]'s test_filter in
+      # platformio.ini. Only the hardware-independent native suite runs here.
+      - name: Run native unit tests
+        run: pio test -e native

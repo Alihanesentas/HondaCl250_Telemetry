@@ -22,7 +22,12 @@ void test_system_state_initialization(void) {
 }
 
 void test_ble_telemetry_packet_packing(void) {
+    // G3.3 -- this used to assert 12 bytes with no version/seq fields; the packet
+    // grew to 15 bytes when those were added (see docs/ble_telemetry_packet_schema.json).
+    // This stale assertion would have failed against current firmware.
     BLETelemetryPacket packet;
+    packet.version = BLE_PACKET_VERSION;
+    packet.seq = 7;
     packet.rpm = 4500;
     packet.speed = 65;
     packet.coolantTemp = 92;
@@ -32,8 +37,10 @@ void test_ble_telemetry_packet_packing(void) {
     packet.maxLeanRight = 245;  // 24.5 deg
     packet.maxLeanLeft = -180;  // -18.0 deg
 
-    // Total size of BLE telemetry packet MUST be exactly 12 bytes
-    TEST_ASSERT_EQUAL(12, sizeof(BLETelemetryPacket));
+    // Total size of BLE telemetry packet MUST be exactly 15 bytes
+    TEST_ASSERT_EQUAL(15, sizeof(BLETelemetryPacket));
+    TEST_ASSERT_EQUAL_UINT8(BLE_PACKET_VERSION, packet.version);
+    TEST_ASSERT_EQUAL_UINT8(7, packet.seq);
     TEST_ASSERT_EQUAL_UINT16(4500, packet.rpm);
     TEST_ASSERT_EQUAL_UINT8(65, packet.speed);
     TEST_ASSERT_EQUAL_INT8(92, packet.coolantTemp);
