@@ -21,9 +21,12 @@ bool HondaCANModule::begin() {
         Serial.println("[CAN SUCCESS] TWAI CAN Bus Driver Active (500 kbps). Listening for Honda ECU...");
         delay(200);
         
-        // Start UDS Extended Session ($10 $03) on both 29-bit and 11-bit IDs
+        // Start UDS Extended Session ($10 $03) on both 29-bit and 11-bit IDs.
+        // G2.3: this is not assumed to succeed -- update() retries it every
+        // SESSION_RETRY_INTERVAL_MS until a positive 0x50 response confirms it.
         sendFrame29(0x02, 0x10, 0x03);
         sendFrame11(0x02, 0x10, 0x03);
+        _lastSessionAttemptMs = millis();
         delay(50);
         _initialized = true;
         return true;
@@ -126,12 +129,32 @@ void HondaCANModule::update(SystemState& state) {
         }
     }
 
-    // 2. UDS Session Keep-Alive (1000ms)
+    // 2. UDS Session Keep-Alive (1000ms) -- only meaningful once a session is confirmed,
+    // but harmless to send regardless (an ECU in default session simply ignores/NAKs it).
     if (now - _lastKeepAlive >= 1000) {
         _lastKeepAlive = now;
         sendFrame29(0x02, 0x3E, 0x80);
         sendFrame11(0x02, 0x3E, 0x80);
     }
+
+    // 2b. G2.3 -- Retry the extended diagnostic session until a positive 0x50 confirms
+    // it, instead of assuming the single begin()-time request landed.
+    if (!_sessionConfirmed && (now - _lastSessionAttemptMs >= SESSION_RETRY_INTERVAL_MS)) {
+        _lastSessionAttemptMs = now;
+        Serial.println("[UDS] Extended session (0x10 0x03) not yet confirmed -- retrying...");
+        sendFrame29(0x02, 0x10, 0x03);
+        sendFrame11(0x02, 0x10, 0x03);
+    }
+
+    // 2c. G2.3 -- Derive ECU presence from recency of any positive UDS response and
+    // publish it for consumers (Nextion etc.) to show an explicit "ECU not found"
+    // state rather than a frozen last-good value.
+    bool ecuPresentNow = (_lastGoodResponseMs != 0) && (now - _lastGoodResponseMs < ECU_ABSENT_TIMEOUT_MS);
+    if (ecuPresentNow != _ecuPresent) {
+        _ecuPresent = ecuPresentNow;
+        Serial.printf("[UDS] ECU is now %s.\n", _ecuPresent ? "PRESENT" : "NOT DETECTED");
+    }
+    state.engine.ecuPresent = _ecuPresent;
 
     // 3. G2.2 -- UDS single-request state machine: IDLE -> REQUEST_SENT -> WAITING -> COMPLETE/TIMEOUT
     if (_udsState == UdsRequestState::IDLE) {
@@ -219,11 +242,20 @@ void HondaCANModule::update(SystemState& state) {
             if (_udsState == UdsRequestState::WAITING && did == _pendingDid) {
                 _udsState = UdsRequestState::COMPLETE;
             }
+            _lastGoodResponseMs = now; // G2.3: any successful DID read proves the ECU is present
+        } else if (isUDSResponse && rxMsg.data[1] == 0x50) {
+            // G2.3 -- Positive response to DiagnosticSessionControl (0x10).
+            if (!_sessionConfirmed) {
+                _sessionConfirmed = true;
+                Serial.println("[UDS SUCCESS] Extended diagnostic session (0x10 0x03) confirmed by ECU.");
+            }
+            _lastGoodResponseMs = now;
         } else if (isUDSResponse && rxMsg.data[1] == 0x7F && rxMsg.data_length_code >= 4) {
             // G2.1 -- Negative response: [PCI][0x7F][echoed SID][NRC].
             uint8_t echoedSid = rxMsg.data[2];
             uint8_t nrc = rxMsg.data[3];
             _nrcCount++;
+            _lastGoodResponseMs = now; // G2.3: a NRC still proves the ECU is alive and answering
 
             if (nrc == 0x78) {
                 // responsePending: the ECU is still working on the DID we're WAITING on.

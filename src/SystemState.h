@@ -18,6 +18,11 @@ inline bool isStale(uint32_t lastUpdateMs, uint32_t thresholdMs = STALE_THRESHOL
  * @brief Engine and ECU telemetry metrics retrieved over CAN bus.
  */
 struct EngineData {
+    // G2.3 -- true once the ECU has answered any UDS request within the last
+    // ECU_ABSENT_TIMEOUT_MS (see HondaCANModule); consumers use this to show an
+    // explicit "ECU not present" state instead of just frozen/stale numbers.
+    bool ecuPresent = false;
+
     float rpm = 0.0f;
     uint32_t rpmUpdatedMs = 0;
     uint8_t speed = 0;

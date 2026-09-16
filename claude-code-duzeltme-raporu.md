@@ -121,6 +121,9 @@
 **Kabul:** Durum makinesi kod içinde açıkça görünüyor; zaman aşımı sayacı loglanıyor.
 
 ### G2.3 — Oturum yönetimi ve kurtarma
+> ✅ **TAMAMLANDI** — `src/SystemState.h` (`EngineData.ecuPresent`), `src/HondaCANModule.h` (oturum/ECU takibi alanları), `src/HondaCANModule.cpp:24-25` (begin, `_lastSessionAttemptMs`), `:137-155` (2b/2c blokları: oturum yeniden deneme + ECU varlık türetme), `:230/:238/:250` (`0x50`/`0x62`/NRC yanıtlarında `_lastGoodResponseMs` güncelleme), `src/NextionModule.cpp:47-51` (`t_ecu` göstergesi). Build ile doğrulandı.
+> **Değerlendirme (raporun istediği gibi):** Genişletilmiş oturumun (0x10 0x03) bu DID'ler için gerçekten gerekli olup olmadığını **kod okuyarak belirleyemem** — bu, Honda ECU firmware'inin bir davranışı ve raporun kendisi mevcut CAN/UDS okumasını (extended session dahil) "gerçek motorda doğrulandı ✅" olarak işaretlemiş. Bu nedenle **oturum tipini değiştirmedim** (raporun "Yapma" kuralı: doğrulanmış CAN/UDS mantığını yeniden yazma). Eğer varsayılan oturumda da okumanın çalışıp çalışmadığını görmek istersen, `HondaCANModule.cpp` begin()'deki `sendFrame29/11(0x02, 0x10, 0x03)` çağrılarını geçici olarak yorum satırı yapıp gerçek ECU'da test etmen gerekir — bunu senin onayın/ölçümün olmadan kalıcı yapmadım.
+> ⚠️ Açık: "ECU YOK" metninin ekranda görünmesi (`t_ecu`) yine Nextion Editor `.HMI` projesi (bu repoda yok) gerektiriyor — G1.4/G2.3'teki diğer sentinel/metin alanlarıyla aynı durum.
 **Problem:** Genişletilmiş oturum açma başarısız olursa ne olduğu belirsiz.
 **Yap:** Oturum açma başarısızsa yeniden dene; başarısız kalırsa açıkça "ECU yok" durumuna geç ve Nextion'da göster. Tester present zamanlaması ile yeniden bağlanma mantığını netleştir.
 **Ayrıca değerlendir ve raporla:** Bu DID'ler için genişletilmiş oturum (`0x10 0x03`) gerçekten gerekli mi, yoksa varsayılan oturum yeterli mi? Gereksizse riski azaltmak için varsayılan oturumda kalmak tercih edilir.

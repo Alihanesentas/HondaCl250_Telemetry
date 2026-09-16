@@ -75,6 +75,23 @@ private:
     static const uint8_t UDS_MAX_CONSECUTIVE_TIMEOUTS = 5;
     static const unsigned long UDS_DID_SKIP_COOLDOWN_MS = 5000;
 
+    // ------------------------------------------------------------------
+    // G2.3 -- Diagnostic session management + ECU-presence detection.
+    // begin() fires the extended session request once but never confirmed it; if the
+    // ECU is absent or rejects it, the module just kept requesting DIDs into the void.
+    // Now the request is retried until a positive 0x50 response is seen, and any
+    // positive UDS response (0x50 or 0x62) marks the ECU "present" for
+    // ECU_ABSENT_TIMEOUT_MS, exposed via state.engine.ecuPresent for consumers
+    // (Nextion) to show an explicit "ECU not found" state instead of frozen numbers.
+    // ------------------------------------------------------------------
+    bool _sessionConfirmed = false;
+    unsigned long _lastSessionAttemptMs = 0;
+    static const unsigned long SESSION_RETRY_INTERVAL_MS = 2000;
+
+    unsigned long _lastGoodResponseMs = 0;
+    bool _ecuPresent = false; // mirrors state.engine.ecuPresent; logged only on change
+    static const unsigned long ECU_ABSENT_TIMEOUT_MS = 3000;
+
     /**
      * @brief Transmits a 29-bit Extended CAN frame for Honda UDS queries ($18DA10F1).
      */

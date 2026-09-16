@@ -50,6 +50,12 @@ void NextionModule::update(SystemState& state) {
         // Vehicle dynamics telemetry
         setVal("n_lean", isStale(state.dynamics.leanAngleUpdatedMs) ? NEXTION_STALE_SENTINEL : (int32_t)state.dynamics.leanAngle);
 
+        // G2.3 -- explicit "ECU not found" indicator, distinct from a merely-stale value
+        // (e.g. right after boot before any UDS response has ever arrived).
+        // Open follow-up, same as G1.4's sentinel: needs the Nextion Editor .HMI project
+        // (not present in this repo) to have a "t_ecu" text component to receive this.
+        setTxt("t_ecu", state.engine.ecuPresent ? "ECU OK" : "ECU YOK");
+
         // Telematics / Smartphone integration (optional Nextion UI widgets)
         if (state.telematics.phoneConnected) {
             setTxt("t_song", state.telematics.songTitle);
