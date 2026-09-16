@@ -8,6 +8,12 @@ WiFiServerModule::WiFiServerModule(uint16_t port)
     : _server(port) {}
 
 bool WiFiServerModule::begin() {
+    // G1.5: AP_SSID/AP_PASS are compile-time constants -- nothing to persist across
+    // reboots. Without this, WiFi.mode()/softAP() write the config to NVS flash on
+    // every single boot (Arduino-ESP32 default), which is unnecessary flash wear and
+    // a needless window for a sudden power-cut mid-write to corrupt the NVS partition.
+    WiFi.persistent(false);
+
     // Configure ESP32 as Wi-Fi Access Point (SoftAP)
     WiFi.mode(WIFI_AP);
     bool apStarted = WiFi.softAP(AP_SSID, AP_PASS);
