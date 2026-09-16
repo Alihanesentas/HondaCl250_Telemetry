@@ -223,6 +223,8 @@
 **Yap:** `SECURITY.md` oluştur: secure boot yok, flash encryption yok, fiziksel erişim koruması yok — bunlar **bilinçli kabul edilmiş prototip sınırları** olarak yazılsın.
 **Not:** Bu doküman, ISO 21434 yaklaşımının öğrenci ölçeğindeki karşılığıdır ve mülakatta değerlidir.
 
+> ✅ **TAMAMLANDI** — `SECURITY.md` oluşturuldu. İki bölüm: "Sertleştirilenler" (G3.3, G4.1-G4.3 ve G1.5/G2.x'te yapılan düzeltmelerin bir özet tablosu) ve "Bilinçli kabul edilen sınırlar" (secure boot yok, flash encryption yok, fiziksel erişim koruması yok, OTA yok, BLE Just Works'ün MITM koruması olmadığı, HTTP API'nin ek kimlik doğrulaması olmadığı, CAN/UDS'in araç üreticisinin kendi tasarımıyla aynı şekilde kimlik doğrulamasız olduğu) — her biri için **neden kabul edildiği** ayrı ayrı yazıldı, sadece liste değil gerekçelendirme.
+
 ---
 
 ## FAZ 5 — Test altyapısı
