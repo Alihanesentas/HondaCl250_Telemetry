@@ -12,7 +12,7 @@ constexpr int32_t NEXTION_STALE_SENTINEL = -999;
  * @brief Nextion HMI display driver module.
  * Sends updated telemetry values over HardwareSerial (UART) using Nextion instructions.
  */
-class NextionModule : public IModule {
+class NextionModule : public IConsumerModule {
 private:
     HardwareSerial& _serial;
     int8_t _rxPin;
@@ -38,7 +38,7 @@ private:
 public:
     NextionModule(HardwareSerial& serial, int8_t rxPin, int8_t txPin);
     bool begin() override;
-    void update(SystemState& state) override;
+    void update(const SystemState& state) override;
     bool isHealthy() const override { return _initialized; }
 };
 

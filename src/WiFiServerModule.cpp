@@ -69,7 +69,7 @@ void WiFiServerModule::handleTelemetryJson() {
     _server.send(200, "application/json", json);
 }
 
-void WiFiServerModule::update(SystemState& state) {
+void WiFiServerModule::update(const SystemState& state) {
     _pSystemState = &state;
     _server.handleClient();
 }

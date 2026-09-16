@@ -62,18 +62,28 @@ BLEServerModule    bleModule;
 WiFiServerModule   wifiModule(80);      // SoftAP HTTP JSON Backend Server on port 80
 SerialLoggerModule loggerModule(1000); // Prints serial log every 1000ms
 
-// Polymorphic module array for clean asynchronous execution
-IModule* modules[] = {
+// G3.1 -- Producer/consumer module arrays, not one polymorphic IModule[]. Producers
+// (CAN, IMU, BLE) are the only modules that ever write into SystemState; consumers
+// (Nextion, WiFi, Logger) get a const SystemState& so the compiler rejects any
+// accidental write. Producers run first each pass so every consumer in that same
+// pass sees that pass's freshest data (see PR discussion: this is not an added-latency
+// change, it removes a pre-existing one-loop staleness gap for BLE-writen telematics
+// reaching Nextion, since BLE used to run after Nextion in the old single array).
+IProducerModule* producers[] = {
     &canModule,
     &imuModule,
-    &displayModule,
     &bleModule,
+};
+IConsumerModule* consumers[] = {
+    &displayModule,
     &wifiModule,
-    &loggerModule
+    &loggerModule,
 };
 
-const uint8_t MODULE_COUNT = sizeof(modules) / sizeof(modules[0]);
-const char* MODULE_NAMES[MODULE_COUNT] = {"CAN", "IMU", "Nextion", "BLE", "WiFi", "Logger"};
+const uint8_t PRODUCER_COUNT = sizeof(producers) / sizeof(producers[0]);
+const uint8_t CONSUMER_COUNT = sizeof(consumers) / sizeof(consumers[0]);
+const char* PRODUCER_NAMES[PRODUCER_COUNT] = {"CAN", "IMU", "BLE"};
+const char* CONSUMER_NAMES[CONSUMER_COUNT] = {"Nextion", "WiFi", "Logger"};
 
 // ============================================================================
 // G0.1 -- LOOP TIMING INSTRUMENTATION
@@ -97,7 +107,8 @@ struct TimingStats {
     void reset() { *this = TimingStats(); }
 };
 
-TimingStats moduleTiming[MODULE_COUNT];
+TimingStats producerTiming[PRODUCER_COUNT];
+TimingStats consumerTiming[CONSUMER_COUNT];
 TimingStats loopTiming;
 unsigned long lastTimingReport = 0;
 const unsigned long TIMING_REPORT_INTERVAL_MS = 10000;
@@ -108,7 +119,46 @@ const unsigned long TIMING_REPORT_INTERVAL_MS = 10000;
 // from update() so one broken peripheral (e.g. IMU not wired) cannot stall
 // or crash the modules that are working.
 // ============================================================================
-bool moduleActive[MODULE_COUNT];
+bool producerActive[PRODUCER_COUNT];
+bool consumerActive[CONSUMER_COUNT];
+
+// ============================================================================
+// Small shared helpers -- refactored out to deduplicate the producer/consumer
+// loops below (begin+log, health-check+log, timing-row printing were each
+// repeated once per group with identical logic).
+// ============================================================================
+bool beginAndLog(IModule* mod, const char* roleLabel, uint8_t index, const char* name) {
+    bool ok = mod->begin();
+    if (ok) {
+        Serial.printf(" [OK] %s [%d] %s successfully initialized.\n", roleLabel, index, name);
+    } else {
+        Serial.printf(" [WARNING] %s [%d] %s failed to initialize -- %s unavailable, excluded from update loop.\n",
+            roleLabel, index, name, name);
+    }
+    return ok;
+}
+
+bool checkHealthTransition(IModule* mod, bool& activeFlag, const char* roleLabel, uint8_t index, const char* name) {
+    bool healthyNow = mod->isHealthy();
+    if (healthyNow != activeFlag) {
+        activeFlag = healthyNow;
+        Serial.printf(" [HEALTH] %s [%d] %s is now %s.\n",
+            roleLabel, index, name, healthyNow ? "healthy" : "unhealthy -- excluded from update loop");
+    }
+    return activeFlag;
+}
+
+void printTimingRow(const char* name, TimingStats& t) {
+    if (t.samples > 0) {
+        Serial.printf("  [%-8s] min=%6lu  avg=%6lu  max=%6lu  (n=%lu)\n",
+            name,
+            (unsigned long)t.minUs,
+            (unsigned long)(t.sumUs / t.samples),
+            (unsigned long)t.maxUs,
+            (unsigned long)t.samples);
+    }
+    t.reset();
+}
 
 // ============================================================================
 // G1.4 -- helper to name a reset reason for the boot log
@@ -148,15 +198,12 @@ void setup() {
     pinMode(DEBUG_LOOP_PIN, OUTPUT);
     digitalWrite(DEBUG_LOOP_PIN, LOW);
 
-    // Initialize all registered system modules
-    for (uint8_t i = 0; i < MODULE_COUNT; i++) {
-        moduleActive[i] = modules[i]->begin();
-        if (moduleActive[i]) {
-            Serial.printf(" [OK] Module [%d] %s successfully initialized.\n", i, MODULE_NAMES[i]);
-        } else {
-            Serial.printf(" [WARNING] Module [%d] %s failed to initialize -- %s unavailable, excluded from update loop.\n",
-                i, MODULE_NAMES[i], MODULE_NAMES[i]);
-        }
+    // Initialize all registered system modules (producers first, then consumers).
+    for (uint8_t i = 0; i < PRODUCER_COUNT; i++) {
+        producerActive[i] = beginAndLog(producers[i], "Producer", i, PRODUCER_NAMES[i]);
+    }
+    for (uint8_t i = 0; i < CONSUMER_COUNT; i++) {
+        consumerActive[i] = beginAndLog(consumers[i], "Consumer", i, CONSUMER_NAMES[i]);
     }
 
     Serial.println(" [SYSTEM] Setup completed. Dual BLE + Wi-Fi active.\n");
@@ -166,23 +213,27 @@ void loop() {
     digitalWrite(DEBUG_LOOP_PIN, HIGH);
     int64_t loopStartUs = esp_timer_get_time();
 
-    // Update all system modules asynchronously with binding to global SystemState.
-    // Modules that failed begin() (or later report unhealthy) are skipped so one
+    // G3.1 -- producers run first so every consumer below sees this pass's freshest
+    // data. Modules that failed begin() (or later report unhealthy) are skipped so one
     // broken peripheral cannot stall the ones that are working (G0.2).
-    for (uint8_t i = 0; i < MODULE_COUNT; i++) {
-        bool healthyNow = modules[i]->isHealthy();
-        if (healthyNow != moduleActive[i]) {
-            moduleActive[i] = healthyNow;
-            Serial.printf(" [HEALTH] Module [%d] %s is now %s.\n",
-                i, MODULE_NAMES[i], healthyNow ? "healthy" : "unhealthy -- excluded from update loop");
-        }
-        if (!moduleActive[i]) {
+    for (uint8_t i = 0; i < PRODUCER_COUNT; i++) {
+        if (!checkHealthTransition(producers[i], producerActive[i], "Producer", i, PRODUCER_NAMES[i])) {
             continue;
         }
 
         int64_t moduleStartUs = esp_timer_get_time();
-        modules[i]->update(globalState);
-        moduleTiming[i].record((uint32_t)(esp_timer_get_time() - moduleStartUs));
+        producers[i]->update(globalState);
+        producerTiming[i].record((uint32_t)(esp_timer_get_time() - moduleStartUs));
+    }
+
+    for (uint8_t i = 0; i < CONSUMER_COUNT; i++) {
+        if (!checkHealthTransition(consumers[i], consumerActive[i], "Consumer", i, CONSUMER_NAMES[i])) {
+            continue;
+        }
+
+        int64_t moduleStartUs = esp_timer_get_time();
+        consumers[i]->update(globalState); // implicit SystemState -> const SystemState&
+        consumerTiming[i].record((uint32_t)(esp_timer_get_time() - moduleStartUs));
     }
 
     loopTiming.record((uint32_t)(esp_timer_get_time() - loopStartUs));
@@ -196,27 +247,13 @@ void loop() {
     if (now - lastTimingReport >= TIMING_REPORT_INTERVAL_MS) {
         lastTimingReport = now;
         Serial.println("\n---- LOOP TIMING (last 10s, microseconds) ----");
-        for (uint8_t i = 0; i < MODULE_COUNT; i++) {
-            TimingStats& t = moduleTiming[i];
-            if (t.samples > 0) {
-                Serial.printf("  [%-8s] min=%6lu  avg=%6lu  max=%6lu  (n=%lu)\n",
-                    MODULE_NAMES[i],
-                    (unsigned long)t.minUs,
-                    (unsigned long)(t.sumUs / t.samples),
-                    (unsigned long)t.maxUs,
-                    (unsigned long)t.samples);
-            }
-            t.reset();
+        for (uint8_t i = 0; i < PRODUCER_COUNT; i++) {
+            printTimingRow(PRODUCER_NAMES[i], producerTiming[i]);
         }
-        if (loopTiming.samples > 0) {
-            Serial.printf("  [%-8s] min=%6lu  avg=%6lu  max=%6lu  (n=%lu)\n",
-                "LOOP",
-                (unsigned long)loopTiming.minUs,
-                (unsigned long)(loopTiming.sumUs / loopTiming.samples),
-                (unsigned long)loopTiming.maxUs,
-                (unsigned long)loopTiming.samples);
+        for (uint8_t i = 0; i < CONSUMER_COUNT; i++) {
+            printTimingRow(CONSUMER_NAMES[i], consumerTiming[i]);
         }
-        loopTiming.reset();
+        printTimingRow("LOOP", loopTiming);
         Serial.println("-----------------------------------------------\n");
     }
 }

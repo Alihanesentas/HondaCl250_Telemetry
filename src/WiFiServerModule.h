@@ -10,12 +10,12 @@
  * Creates a wireless Access Point ("Honda-CL250-AP") and serves live telemetry JSON
  * endpoints for smartphone mobile apps and Web browser dashboards.
  */
-class WiFiServerModule : public IModule {
+class WiFiServerModule : public IConsumerModule {
 private:
     WebServer _server;
     bool _initialized = false;
     unsigned long _lastUpdate = 0;
-    SystemState* _pSystemState = nullptr;
+    const SystemState* _pSystemState = nullptr;
 
     /**
      * @brief Handles HTTP GET request to /api/telemetry returning JSON payload.
@@ -32,7 +32,7 @@ public:
     virtual ~WiFiServerModule() {}
 
     bool begin() override;
-    void update(SystemState& state) override;
+    void update(const SystemState& state) override;
     bool isHealthy() const override { return _initialized; }
 };
 

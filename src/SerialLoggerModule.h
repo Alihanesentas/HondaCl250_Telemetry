@@ -7,7 +7,7 @@
  * @brief Serial Logger debug module.
  * Formats and prints real-time telemetry metrics to USB Serial terminal for monitoring.
  */
-class SerialLoggerModule : public IModule {
+class SerialLoggerModule : public IConsumerModule {
 private:
     unsigned long _lastPrint = 0;
     unsigned long _printIntervalMs;
@@ -15,7 +15,7 @@ private:
 public:
     SerialLoggerModule(unsigned long printIntervalMs = 1000);
     bool begin() override;
-    void update(SystemState& state) override;
+    void update(const SystemState& state) override;
     bool isHealthy() const override { return true; }
 };
 

@@ -18,7 +18,7 @@
  * the staleness (G0.3), Nextion safe-state (G1.4/G2.3) and ecuPresent logic can be
  * exercised on real ESP32/Nextion/BLE/WiFi hardware without a real Honda ECU.
  */
-class MockCANModule : public IModule {
+class MockCANModule : public IProducerModule {
 private:
     unsigned long _lastUpdateMs = 0;
     unsigned long _dropoutStartedMs = 0;

@@ -141,6 +141,9 @@
 *Buradaki değişiklikler için önce seçenek sun, onay bekle.*
 
 ### G3.1 — `SystemState` erişim sınırları
+> ✅ **TAMAMLANDI** — `src/IModule.h` (ortak `IModule` + `IProducerModule::update(SystemState&)` + `IConsumerModule::update(const SystemState&)`), `HondaCANModule.h`/`IMUModule.h`/`BLEServerModule.h`/`MockCANModule.h` → `IProducerModule`, `NextionModule.h/.cpp`/`WiFiServerModule.h/.cpp`/`SerialLoggerModule.h/.cpp` → `IConsumerModule` + `const SystemState&` imzası. `src/main.cpp:65-86` (ayrı `producers[]`/`consumers[]` dizileri), `:163-181` (setup), `:190-223` (loop — üreticiler önce, sonra tüketiciler), `:126-158` (tekrarı azaltan `beginAndLog`/`checkHealthTransition`/`printTimingRow` yardımcıları — refactor geçişi).
+> **Not:** Rapor örneği "BLE"yi tüketici olarak listeliyordu ama BLE gerçekte `state.telematics`'e yazıyor (telefon verisi) — bu yüzden BLE `IProducerModule` tarafına alındı, kullanıcıyla netleştirildi. Üretici-önce-tüketici-sonra sıralaması ek gecikme getirmiyor; tersine BLE→Nextion arasındaki önceden var olan bir turluk bayatlık farkını gideriyor (BLE eskiden Nextion'dan sonra çalışıyordu).
+> Build ile doğrulandı (her iki ortam: gerçek + mock), derleyici tüketici modüllerin `state`'e yazma girişimini derleme hatası olarak yakalıyor (denendi, üç tüketici modülün hiçbiri yazmadığı için sorunsuz derlendi).
 **Problem:** `update(SystemState& state)` her modüle tüm sisteme yazma yetkisi veriyor. Modülerlik iddiası burada kırılıyor.
 **Yap:** Üretici/tüketici ayrımı öner. Tüketiciler (Nextion, BLE, Wi-Fi, logger) `const SystemState&` alsın; sadece üreticiler (CAN, IMU) yazabilsin.
 **Kabul:** Derleyici, tüketici modüllerin yazma girişimini hata olarak yakalıyor.

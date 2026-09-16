@@ -45,7 +45,7 @@ struct TelematicsEvent {
  * Streams real-time telemetry packets to connected mobile devices (iOS / Android)
  * and receives smartphone telematics (music track info, turn-by-turn navigation data).
  */
-class BLEServerModule : public IModule, public BLEServerCallbacks, public BLECharacteristicCallbacks {
+class BLEServerModule : public IProducerModule, public BLEServerCallbacks, public BLECharacteristicCallbacks {
 private:
     BLEServer* _pServer = nullptr;
     BLECharacteristic* _pTxCharacteristic = nullptr;

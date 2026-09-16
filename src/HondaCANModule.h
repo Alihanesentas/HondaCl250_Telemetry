@@ -8,7 +8,7 @@
  * @brief Module handling CAN bus communications with Honda ECU via ESP32 TWAI driver.
  * Supports 29-bit Extended Honda UDS and 11-bit Standard OBD2 fallback queries.
  */
-class HondaCANModule : public IModule {
+class HondaCANModule : public IProducerModule {
 private:
     gpio_num_t _txPin;
     gpio_num_t _rxPin;

@@ -26,7 +26,7 @@ void NextionModule::setTxt(const char* name, const char* text) {
     sendEndCmd();
 }
 
-void NextionModule::update(SystemState& state) {
+void NextionModule::update(const SystemState& state) {
     unsigned long now = millis();
     // Refresh Nextion display at 10Hz (every 100ms) to avoid over-saturating UART bandwidth
     if (now - _lastRender >= 100) {

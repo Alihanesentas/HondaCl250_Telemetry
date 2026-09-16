@@ -8,7 +8,7 @@ bool SerialLoggerModule::begin() {
     return true;
 }
 
-void SerialLoggerModule::update(SystemState& state) {
+void SerialLoggerModule::update(const SystemState& state) {
     unsigned long now = millis();
     if (now - _lastPrint >= _printIntervalMs) {
         _lastPrint = now;

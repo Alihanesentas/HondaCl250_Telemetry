@@ -8,7 +8,7 @@
  * @brief Inertial Measurement Unit (IMU / MPU6050) module.
  * Reads accelerometer and gyroscope data over I2C to calculate vehicle lean dynamics.
  */
-class IMUModule : public IModule {
+class IMUModule : public IProducerModule {
 private:
     uint8_t _addr;
     int _sdaPin;
