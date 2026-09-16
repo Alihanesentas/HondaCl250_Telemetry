@@ -12,6 +12,9 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include <cstdio>
+#include <cstdarg>
+#include <algorithm>
 
 // SystemState.h's isStale() calls millis(). Tests control the fake clock directly
 // instead of sleeping in real time, so results are deterministic.
@@ -29,5 +32,29 @@ inline unsigned long millis() {
 inline void test_setMillis(unsigned long ms) {
     native_millis_ref() = ms;
 }
+
+// HondaCANModule::begin() calls delay(200)/delay(50) between session-start frames.
+// No real hardware timing to respect on the host -- a no-op keeps tests fast and
+// deterministic (they never actually need to wait).
+inline void delay(unsigned long) {}
+
+// Arduino's min()/max() are used by HondaCANModule for backoff/timeout capping.
+using std::min;
+using std::max;
+
+// Minimal Serial stand-in -- HondaCANModule logs status/warnings through this.
+// Tests don't assert on log output, so this just forwards to stdout; it exists
+// purely so those calls compile and don't crash on the host.
+struct NativeSerialStub {
+    void println(const char* s) { std::puts(s); }
+    void printf(const char* fmt, ...) {
+        va_list args;
+        va_start(args, fmt);
+        std::vprintf(fmt, args);
+        va_end(args);
+    }
+};
+// static (not C++17 `inline` variable) so this header stays valid under -std=c++11.
+static NativeSerialStub Serial;
 
 #endif // NATIVE_TEST_ARDUINO_STUB_H

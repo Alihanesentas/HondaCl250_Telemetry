@@ -14,7 +14,6 @@ class WiFiServerModule : public IConsumerModule {
 private:
     WebServer _server;
     bool _initialized = false;
-    unsigned long _lastUpdate = 0;
     const SystemState* _pSystemState = nullptr;
 
     // G4.1: AP is off by default and only enabled on-demand (BOOT button at

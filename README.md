@@ -26,11 +26,18 @@ The system reads live engine data from the motorcycle's **DLC (Data Link Connect
 ```
 HondaCl250_Telemetry/
 ├── CONTEXT.md                  # Comprehensive technical guide & architecture specs
-├── platformio.ini              # PlatformIO configuration for ESP32-S3
+├── SECURITY.md                 # Hardened areas + consciously accepted limitations
+├── platformio.ini              # PlatformIO config: real, mock, and native test environments
+├── docs/
+│   └── ble_telemetry_packet_schema.json  # Single source of truth for the BLE packet layout
 ├── src/                        # ESP32 C++ Source Files
-│   ├── IModule.h               # Abstract polymorphic module interface
-│   ├── SystemState.h           # Central telemetry data store
-│   ├── HondaCANModule.h/cpp    # Honda DLC/OBD2 CAN bus UDS driver (TWAI)
+│   ├── IModule.h               # Producer/consumer module interfaces
+│   ├── SystemState.h           # Central telemetry data store + staleness helper
+│   ├── hal/
+│   │   ├── ICanBus.h           # CAN bus abstraction (HondaCANModule depends only on this)
+│   │   └── TwaiCanBus.h/cpp    # Real ESP32-S3 TWAI-backed ICanBus implementation
+│   ├── HondaCANModule.h/cpp    # Honda DLC/OBD2 CAN bus UDS driver (protocol logic, hardware-independent)
+│   ├── MockCANModule.h/cpp     # Synthetic telemetry source (no ECU/CAN needed) for on-device testing
 │   ├── IMUModule.h/cpp         # MPU6050 accelerometer/gyro lean angle driver
 │   ├── NextionModule.h/cpp     # Nextion HMI display UART driver
 │   ├── BLETelemetryPacket.h    # 15-byte packed binary BLE notification payload (versioned, see docs/ble_telemetry_packet_schema.json)
@@ -38,6 +45,12 @@ HondaCl250_Telemetry/
 │   ├── WiFiServerModule.h/cpp  # ESP32 SoftAP & HTTP REST/JSON API server
 │   ├── SerialLoggerModule.h/cpp# USB Serial monitor telemetry logger
 │   └── main.cpp                # Asynchronous polymorphic module execution loop
+├── test/
+│   ├── test_embedded/          # Runs ON the ESP32 board over USB (pio test -e esp32-s3-devkitc-1)
+│   ├── test_native/            # Host-only: SystemState/BLETelemetryPacket (pio test -e native)
+│   ├── test_can_protocol/      # Host-only: HondaCANModule's real UDS logic vs. MockCanBus
+│   ├── mocks/MockCanBus.h      # ICanBus test double used by test_can_protocol
+│   └── native_stubs/Arduino.h  # Minimal millis()/Serial/delay() stand-in for native builds
 └── mobile_app/                 # Mobile Application Suite
     ├── index.html              # Mobile Web Bluetooth PWA & Cockpit Dashboard
     ├── styles.css              # Dark Cockpit UI design system
@@ -67,12 +80,21 @@ HondaCl250_Telemetry/
 
 ### ESP32-S3 Firmware (PlatformIO)
 1. Open the project in VS Code with the PlatformIO extension.
-2. Connect your ESP32-S3 board via USB.
-3. Build and upload firmware:
+2. Copy `platformio_local.ini.example` to `platformio_local.ini` and set your own `AP_PASSWORD` (gitignored, never commit the real one -- see [SECURITY.md](SECURITY.md)).
+3. Connect your ESP32-S3 board via USB.
+4. Build and upload firmware -- there is no single default environment, so `-e` is required:
    ```bash
-   pio run -t upload
+   pio run -e esp32-s3-devkitc-1 -t upload        # real CAN/UDS hardware
+   pio run -e esp32-s3-devkitc-1-mock -t upload   # synthetic telemetry, no ECU/CAN needed
    ```
-4. Open Serial Monitor at `115200` baud to observe startup diagnostic logs.
+5. Open Serial Monitor at `115200` baud to observe startup diagnostic logs.
+
+### Running Tests
+```bash
+pio test -e native            # host-only: SystemState, BLETelemetryPacket, HondaCANModule's
+                               # UDS protocol logic against MockCanBus -- no board needed
+pio test -e esp32-s3-devkitc-1 # on-device suite, needs the board connected over USB
+```
 
 ### Mobile App Installation
 - **Web App**: Open [`mobile_app/index.html`](file:///Users/alihanesentas/Desktop/HondaCl250_Telemetry/mobile_app/index.html) in mobile Safari/Chrome or Blueify. Tap **Connect BLE** or **Demo Simulator**.

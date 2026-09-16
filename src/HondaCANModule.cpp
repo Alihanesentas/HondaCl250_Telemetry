@@ -1,26 +1,39 @@
 #include "HondaCANModule.h"
 
-// 29-bit Extended Honda UDS ID (Target ECU 0x10, Source Tool 0xF1)
+// 29-bit Extended Honda UDS request ID (Target ECU 0x10, Source Tool 0xF1).
+// The response IDs (UDS_RESP_29BIT/11BIT) are public static constants on the
+// class now, exposed for test/test_can_protocol to construct fake ECU frames.
 #define HONDA_UDS_REQ_29BIT   0x18DA10F1
-#define HONDA_UDS_RESP_29BIT  0x18DAF110
 
-// 11-bit Standard Honda/OBD2 UDS ID (Target ECU 0x7E0, Source Tool 0x7E8)
+// 11-bit Standard Honda/OBD2 UDS request ID (Target ECU 0x7E0, Source Tool 0x7E8)
 #define HONDA_UDS_REQ_11BIT   0x7E0
-#define HONDA_UDS_RESP_11BIT  0x7E8
 
-HondaCANModule::HondaCANModule(gpio_num_t txPin, gpio_num_t rxPin) 
-    : _txPin(txPin), _rxPin(rxPin) {}
+// Out-of-class definitions for the static const members declared in the header.
+// Not needed for their use as plain values (array sizes, direct comparisons), but
+// required by the standard the moment anything takes their address/reference --
+// e.g. min(_recoveryBackoffMs * 2, RECOVERY_BACKOFF_MAX_MS) with a real std::min
+// template. This previously only "worked" because Arduino's min()/max() are
+// reference-free macros; a strict linker (as native/test builds use) will reject
+// the ODR-use otherwise. Harmless, always-correct C++ to add regardless.
+const uint32_t HondaCANModule::UDS_RESP_29BIT;
+const uint32_t HondaCANModule::UDS_RESP_11BIT;
+const unsigned long HondaCANModule::RECOVERY_BACKOFF_MAX_MS;
+const uint8_t HondaCANModule::DID_SLOT_COUNT;
+const unsigned long HondaCANModule::UDS_BASE_TIMEOUT_MS;
+const unsigned long HondaCANModule::UDS_MAX_TIMEOUT_MS;
+const uint8_t HondaCANModule::UDS_MAX_CONSECUTIVE_TIMEOUTS;
+const unsigned long HondaCANModule::UDS_DID_SKIP_COOLDOWN_MS;
+const unsigned long HondaCANModule::SESSION_RETRY_INTERVAL_MS;
+const unsigned long HondaCANModule::ECU_ABSENT_TIMEOUT_MS;
+
+HondaCANModule::HondaCANModule(ICanBus& bus)
+    : _bus(bus) {}
 
 bool HondaCANModule::begin() {
-    twai_timing_config_t t_config = TWAI_TIMING_CONFIG_500KBITS();
-    twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(_txPin, _rxPin, TWAI_MODE_NORMAL);
-    g_config.alerts_enabled = TWAI_ALERT_BUS_OFF | TWAI_ALERT_BUS_RECOVERED | TWAI_ALERT_ERR_PASS | TWAI_ALERT_ABOVE_ERR_WARN;
-    twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
-
-    if (twai_driver_install(&g_config, &t_config, &f_config) == ESP_OK && twai_start() == ESP_OK) {
-        Serial.println("[CAN SUCCESS] TWAI CAN Bus Driver Active (500 kbps). Listening for Honda ECU...");
+    if (_bus.begin()) {
+        Serial.println("[CAN SUCCESS] CAN Bus Active (500 kbps). Listening for Honda ECU...");
         delay(200);
-        
+
         // Start UDS Extended Session ($10 $03) on both 29-bit and 11-bit IDs.
         // G2.3: this is not assumed to succeed -- update() retries it every
         // SESSION_RETRY_INTERVAL_MS until a positive 0x50 response confirms it.
@@ -31,39 +44,37 @@ bool HondaCANModule::begin() {
         _initialized = true;
         return true;
     }
-    Serial.println("[CAN ERROR] Failed to initialize TWAI CAN bus driver! Check TX/RX pins.");
+    Serial.println("[CAN ERROR] Failed to initialize CAN bus driver! Check TX/RX pins.");
     _initialized = false;
     return false;
 }
 
 void HondaCANModule::sendFrame29(uint8_t d0, uint8_t d1, uint8_t d2, uint8_t d3) {
-    twai_message_t txMsg;
-    txMsg.extd = 1; // 29-bit Extended Frame
-    txMsg.rtr = 0;
-    txMsg.identifier = HONDA_UDS_REQ_29BIT;
-    txMsg.data_length_code = 8;
-    txMsg.data[0] = d0;
-    txMsg.data[1] = d1;
-    txMsg.data[2] = d2;
-    txMsg.data[3] = d3;
-    for (int i = 4; i < 8; i++) txMsg.data[i] = 0xAA;
+    CanFrame frame;
+    frame.extended = true; // 29-bit Extended Frame
+    frame.id = HONDA_UDS_REQ_29BIT;
+    frame.dlc = 8;
+    frame.data[0] = d0;
+    frame.data[1] = d1;
+    frame.data[2] = d2;
+    frame.data[3] = d3;
+    for (int i = 4; i < 8; i++) frame.data[i] = 0xAA;
 
-    twai_transmit(&txMsg, pdMS_TO_TICKS(5));
+    _bus.transmit(frame);
 }
 
 void HondaCANModule::sendFrame11(uint8_t d0, uint8_t d1, uint8_t d2, uint8_t d3) {
-    twai_message_t txMsg;
-    txMsg.extd = 0; // 11-bit Standard Frame
-    txMsg.rtr = 0;
-    txMsg.identifier = HONDA_UDS_REQ_11BIT;
-    txMsg.data_length_code = 8;
-    txMsg.data[0] = d0;
-    txMsg.data[1] = d1;
-    txMsg.data[2] = d2;
-    txMsg.data[3] = d3;
-    for (int i = 4; i < 8; i++) txMsg.data[i] = 0xAA;
+    CanFrame frame;
+    frame.extended = false; // 11-bit Standard Frame
+    frame.id = HONDA_UDS_REQ_11BIT;
+    frame.dlc = 8;
+    frame.data[0] = d0;
+    frame.data[1] = d1;
+    frame.data[2] = d2;
+    frame.data[3] = d3;
+    for (int i = 4; i < 8; i++) frame.data[i] = 0xAA;
 
-    twai_transmit(&txMsg, pdMS_TO_TICKS(5));
+    _bus.transmit(frame);
 }
 
 const char* HondaCANModule::nrcName(uint8_t nrc) {
@@ -94,39 +105,39 @@ void HondaCANModule::requestDID(uint16_t did) {
 void HondaCANModule::update(SystemState& state) {
     unsigned long now = millis();
 
-    // 1. TWAI Bus-Off Auto Recovery Check (G1.3 -- exponential backoff, event logging)
-    twai_status_info_t status;
-    if (twai_get_status_info(&status) == ESP_OK) {
-        if (status.state == TWAI_STATE_BUS_OFF) {
-            if (!_busOff) {
-                // Just entered bus-off: log once, reset backoff, attempt immediately.
-                _busOff = true;
-                _busOffEventCount++;
-                _recoveryBackoffMs = 1000;
-                _lastRecoveryAttempt = 0;
-                Serial.printf("[CAN WARNING] TWAI Bus-Off detected (event #%lu, tx_err=%d, rx_err=%d). Starting recovery...\n",
-                    (unsigned long)_busOffEventCount, status.tx_error_counter, status.rx_error_counter);
-            }
+    // 1. Bus-Off Auto Recovery Check (G1.3 -- exponential backoff, event logging)
+    CanBusState busState = _bus.getState();
+    if (busState == CanBusState::BUS_OFF) {
+        if (!_busOff) {
+            // Just entered bus-off: log once, reset backoff, attempt immediately.
+            _busOff = true;
+            _busOffEventCount++;
+            _recoveryBackoffMs = 1000;
+            _lastRecoveryAttempt = 0;
+            uint16_t txErr = 0, rxErr = 0;
+            _bus.getErrorCounters(txErr, rxErr);
+            Serial.printf("[CAN WARNING] Bus-Off detected (event #%lu, tx_err=%u, rx_err=%u). Starting recovery...\n",
+                (unsigned long)_busOffEventCount, txErr, rxErr);
+        }
 
-            if (now - _lastRecoveryAttempt >= _recoveryBackoffMs) {
-                _lastRecoveryAttempt = now;
-                Serial.printf("[CAN WARNING] Bus-Off recovery attempt (next retry in %lu ms if this fails)...\n",
-                    _recoveryBackoffMs);
-                twai_initiate_recovery();
-                _recoveryBackoffMs = min(_recoveryBackoffMs * 2, RECOVERY_BACKOFF_MAX_MS);
-            }
-        } else if (status.state == TWAI_STATE_STOPPED) {
-            // twai_initiate_recovery() lands the driver here once recovery completes.
-            if (_busOff) {
-                Serial.println("[CAN SUCCESS] TWAI Bus-Off recovery complete, restarting driver.");
-                _busOff = false;
-                _recoveryBackoffMs = 1000;
-            }
-            twai_start();
-        } else if (status.state == TWAI_STATE_RUNNING && _busOff) {
+        if (now - _lastRecoveryAttempt >= _recoveryBackoffMs) {
+            _lastRecoveryAttempt = now;
+            Serial.printf("[CAN WARNING] Bus-Off recovery attempt (next retry in %lu ms if this fails)...\n",
+                _recoveryBackoffMs);
+            _bus.initiateRecovery();
+            _recoveryBackoffMs = min(_recoveryBackoffMs * 2, RECOVERY_BACKOFF_MAX_MS);
+        }
+    } else if (busState == CanBusState::STOPPED) {
+        // initiateRecovery() lands the driver here once recovery completes.
+        if (_busOff) {
+            Serial.println("[CAN SUCCESS] Bus-Off recovery complete, restarting driver.");
             _busOff = false;
             _recoveryBackoffMs = 1000;
         }
+        _bus.start();
+    } else if (busState == CanBusState::RUNNING && _busOff) {
+        _busOff = false;
+        _recoveryBackoffMs = 1000;
     }
 
     // 2. UDS Session Keep-Alive (1000ms) -- only meaningful once a session is confirmed,
@@ -203,10 +214,10 @@ void HondaCANModule::update(SystemState& state) {
     }
 
     // 4. Read incoming CAN frames from Honda ECU
-    twai_message_t rxMsg;
-    while (twai_receive(&rxMsg, 0) == ESP_OK) {
+    CanFrame rxMsg;
+    while (_bus.receive(rxMsg)) {
         // Check if response comes from 29-bit or 11-bit UDS frame
-        bool isUDSResponse = (rxMsg.identifier == HONDA_UDS_RESP_29BIT || rxMsg.identifier == HONDA_UDS_RESP_11BIT);
+        bool isUDSResponse = (rxMsg.id == UDS_RESP_29BIT || rxMsg.id == UDS_RESP_11BIT);
 
         // G2.4 -- ISO-TP (ISO 15765-2) PCI byte check. rxMsg.data[0] high nibble is the
         // frame type: 0x0X = Single Frame (X = payload length, what every DID response
@@ -247,7 +258,7 @@ void HondaCANModule::update(SystemState& state) {
                     state.engine.throttlePosUpdatedMs = now;
                     break;
                 case 0xF442: // Battery Voltage (mV / V)
-                    if (rxMsg.data_length_code >= 6) {
+                    if (rxMsg.dlc >= 6) {
                         uint16_t rawVolt = (rxMsg.data[4] << 8) | rxMsg.data[5];
                         state.engine.batteryVoltage = rawVolt > 500 ? (rawVolt / 1000.0f) : (rxMsg.data[4] / 10.0f);
                     } else {
@@ -269,7 +280,7 @@ void HondaCANModule::update(SystemState& state) {
                 Serial.println("[UDS SUCCESS] Extended diagnostic session (0x10 0x03) confirmed by ECU.");
             }
             _lastGoodResponseMs = now;
-        } else if (isUDSResponse && rxMsg.data[1] == 0x7F && rxMsg.data_length_code >= 4) {
+        } else if (isUDSResponse && rxMsg.data[1] == 0x7F && rxMsg.dlc >= 4) {
             // G2.1 -- Negative response: [PCI][0x7F][echoed SID][NRC].
             uint8_t echoedSid = rxMsg.data[2];
             uint8_t nrc = rxMsg.data[3];

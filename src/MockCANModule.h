@@ -21,7 +21,6 @@
 class MockCANModule : public IProducerModule {
 private:
     unsigned long _lastUpdateMs = 0;
-    unsigned long _dropoutStartedMs = 0;
     bool _inDropout = false;
 
     static const unsigned long UPDATE_INTERVAL_MS = 50;     // matches HondaCANModule's RPM cadence

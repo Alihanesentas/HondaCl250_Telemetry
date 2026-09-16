@@ -2,16 +2,32 @@
 #define HONDA_CAN_MODULE_H
 
 #include "IModule.h"
-#include "driver/twai.h"
+#include "hal/ICanBus.h"
 
 /**
- * @brief Module handling CAN bus communications with Honda ECU via ESP32 TWAI driver.
+ * @brief Module handling CAN bus communications with Honda ECU via a generic ICanBus.
  * Supports 29-bit Extended Honda UDS and 11-bit Standard OBD2 fallback queries.
+ *
+ * G3.2 -- depends only on ICanBus, never on driver/twai.h: main.cpp injects a
+ * TwaiCanBus on real hardware and test/test_can_protocol injects a MockCanBus, so
+ * this exact protocol logic (request state machine, NRC handling, ISO-TP frame
+ * checking, bus-off recovery) runs identically either way and is unit-testable
+ * with no ESP32 device attached.
  */
 class HondaCANModule : public IProducerModule {
+public:
+    // Exposed so tests can construct realistic fake ECU responses without
+    // duplicating these as separately-maintained magic numbers.
+    static const uint32_t UDS_RESP_29BIT = 0x18DAF110;
+    static const uint32_t UDS_RESP_11BIT = 0x7E8;
+
+    explicit HondaCANModule(ICanBus& bus);
+    bool begin() override;
+    void update(SystemState& state) override;
+    bool isHealthy() const override { return _initialized; }
+
 private:
-    gpio_num_t _txPin;
-    gpio_num_t _rxPin;
+    ICanBus& _bus;
     bool _initialized = false;
     unsigned long _lastKeepAlive = 0;
 
@@ -106,12 +122,6 @@ private:
      * @brief Transmits a ReadDataByIdentifier ($22) request for a specific DID.
      */
     void requestDID(uint16_t did);
-
-public:
-    HondaCANModule(gpio_num_t txPin, gpio_num_t rxPin);
-    bool begin() override;
-    void update(SystemState& state) override;
-    bool isHealthy() const override { return _initialized; }
 };
 
 #endif // HONDA_CAN_MODULE_H

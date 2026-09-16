@@ -9,6 +9,7 @@
 #include "MockCANModule.h"
 #else
 #include "HondaCANModule.h"
+#include "hal/TwaiCanBus.h"
 #endif
 #include "IMUModule.h"
 #include "NextionModule.h"
@@ -50,11 +51,18 @@ SystemState globalState;
 // G3.2-alt -- MOCK_CAN_DATA build flag (see platformio.ini env:esp32-s3-devkitc-1-mock)
 // swaps in MockCANModule (synthetic telemetry, no ECU/CAN hardware) so the rest of the
 // system -- Nextion, BLE, WiFi, staleness, watchdog -- can be exercised on real ESP32
-// hardware without a Honda ECU. HondaCANModule.cpp/.h are never touched by this.
+// hardware without a Honda ECU. HondaCANModule's own protocol logic is never touched
+// by this; it's a separate module entirely.
+//
+// G3.2 -- On real hardware, HondaCANModule is injected with a TwaiCanBus (the actual
+// TWAI-backed ICanBus implementation). Its UDS/protocol logic never calls driver/twai.h
+// directly, so the exact same HondaCANModule.cpp also runs unit-tested against a
+// MockCanBus in test/test_can_protocol, with no ESP32 device attached.
 #ifdef MOCK_CAN_DATA
 MockCANModule      canModule;
 #else
-HondaCANModule     canModule(CAN_TX_PIN, CAN_RX_PIN);
+TwaiCanBus         canBus(CAN_TX_PIN, CAN_RX_PIN);
+HondaCANModule     canModule(canBus);
 #endif
 IMUModule          imuModule(I2C_SDA_PIN, I2C_SCL_PIN);
 NextionModule      displayModule(NextionSerial, UART2_RX_PIN, UART2_TX_PIN);
