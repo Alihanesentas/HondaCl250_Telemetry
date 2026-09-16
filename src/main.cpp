@@ -5,7 +5,11 @@
 
 #include "SystemState.h"
 #include "IModule.h"
+#ifdef MOCK_CAN_DATA
+#include "MockCANModule.h"
+#else
 #include "HondaCANModule.h"
+#endif
 #include "IMUModule.h"
 #include "NextionModule.h"
 #include "BLEServerModule.h"
@@ -43,7 +47,15 @@ SystemState globalState;
 // ============================================================================
 // SYSTEM MODULE INSTANTIATIONS
 // ============================================================================
+// G3.2-alt -- MOCK_CAN_DATA build flag (see platformio.ini env:esp32-s3-devkitc-1-mock)
+// swaps in MockCANModule (synthetic telemetry, no ECU/CAN hardware) so the rest of the
+// system -- Nextion, BLE, WiFi, staleness, watchdog -- can be exercised on real ESP32
+// hardware without a Honda ECU. HondaCANModule.cpp/.h are never touched by this.
+#ifdef MOCK_CAN_DATA
+MockCANModule      canModule;
+#else
 HondaCANModule     canModule(CAN_TX_PIN, CAN_RX_PIN);
+#endif
 IMUModule          imuModule(I2C_SDA_PIN, I2C_SCL_PIN);
 NextionModule      displayModule(NextionSerial, UART2_RX_PIN, UART2_TX_PIN);
 BLEServerModule    bleModule;

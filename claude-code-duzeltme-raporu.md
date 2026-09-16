@@ -151,6 +151,9 @@
 **Öncelik:** Önce sadece `ICanBus` — en değerli ve en test edilebilir olan o. Diğerleri sonra.
 **Kabul:** UDS protokol mantığı mock CAN üstünde, donanım olmadan çalışıyor.
 
+> 🔁 **YÖN DEĞİŞTİRİLDİ (kullanıcı talimatı):** İlk denemede `HondaCANModule`'ü `ICanBus&` almaya çevirip gerçek `twai_*` çağrılarını `TwaiCanBus`'a taşımıştım (dependency injection). Kullanıcı doğrulanmış CAN alım katmanına dokunulmasını istemedi: *"normal data aldığımız katmanı değiştirme... ayrı bir modül ile mock data serve edebilirsin."* Bu yüzden o refactor tamamen geri alındı (`git checkout`), `src/hal/` silindi — `HondaCANModule.h/.cpp` şu an main'deki (G2.4 sonrası) haliyle **bit-bit aynı** (build boyutu doğrulandı: Flash 1369361B / RAM 67020B, değişmedi).
+> ✅ **Bunun yerine TAMAMLANDI:** `src/MockCANModule.h/.cpp` — `HondaCANModule`'den tamamen bağımsız, `IModule` uygulayan ayrı bir modül; gerçekçi senkron veri (RPM/hız/sıcaklık/gerilim/lean açısı sinüs dalgası + periyodik "ECU dropout" simülasyonu) doğrudan `SystemState`'e yazıyor. `platformio.ini`'de yeni `[env:esp32-s3-devkitc-1-mock]` ortamı (`-D MOCK_CAN_DATA`), `src/main.cpp`'de sadece `#ifdef` ile modül seçimi değişiyor. Her iki ortam da build ile doğrulandı. Gerçek `ICanBus`/native-test yaklaşımı (G3.2'nin orijinal tarifi) henüz yapılmadı — istenirse ayrıca ele alınabilir.
+
 ### G3.3 — Paket formatı tek kaynak
 **Problem:** 12 baytlık BLE paketi üç yerde ayrı tanımlı: C++ struct, `app.js` ayrıştırıcı, Dart modeli. Biri değişince diğerleri sessizce bozulur.
 **Yap:** Formatı tek bir şema dosyasında (JSON veya basit tablo) belgele; üç implementasyonun da o şemayı referans aldığını yorum satırıyla işaretle. Pakete **`version` (1 bayt)** ve **`seq` (1 bayt)** alanları ekle.
