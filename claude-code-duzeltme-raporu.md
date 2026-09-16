@@ -115,6 +115,7 @@
 **Kabul:** Bilinmeyen bir DID istendiğinde sistem NRC'yi doğru raporluyor ve kilitlenmiyor.
 
 ### G2.2 — Tek istek kuralı ve zaman aşımı
+> ✅ **TAMAMLANDI** — `src/HondaCANModule.h` (`UdsRequestState` enum, `DidSlot` struct/dizisi, zaman aşımı/skip sabitleri), `src/HondaCANModule.cpp:136-180` (durum makinesi: IDLE→REQUEST_SENT→WAITING→COMPLETE/TIMEOUT), `:218-246` (rx yanıtlarının FSM'e bağlanması). Önceden RPM (50ms) ve yavaş DID rotasyonu (200ms) birbirinden bağımsız, aynı anda birden fazla istek havada olabiliyordu; artık sistemde her an **tek** bekleyen istek var, art arda 5 zaman aşımından sonra o DID 5sn askıya alınıyor. Build ile doğrulandı. Not: RPM cadence'i artık başka bir DID'in yanıtını beklerken en fazla ~100ms gecikebilir (G0.1 enstrümantasyonuyla ölçülebilir).
 **Problem:** UDS istek/yanıt protokolüdür. Aynı anda birden fazla istek uçarsa yanıtlar karışır.
 **Yap:** Açık bir istek durum makinesi: `IDLE → REQUEST_SENT → WAITING → COMPLETE/TIMEOUT`. Aynı anda tek bekleyen istek. Zaman aşımında sınırlı tekrar, sonra o DID'i geçici olarak atla.
 **Kabul:** Durum makinesi kod içinde açıkça görünüyor; zaman aşımı sayacı loglanıyor.

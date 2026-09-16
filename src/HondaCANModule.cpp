@@ -133,24 +133,53 @@ void HondaCANModule::update(SystemState& state) {
         sendFrame11(0x02, 0x3E, 0x80);
     }
 
-    // 3. High Frequency Request (Engine RPM - 50ms / 20Hz)
-    if (now - _lastFastReq >= 50) {
-        _lastFastReq = now;
-        requestDID(0xF40C); // Engine RPM DID
-    }
+    // 3. G2.2 -- UDS single-request state machine: IDLE -> REQUEST_SENT -> WAITING -> COMPLETE/TIMEOUT
+    if (_udsState == UdsRequestState::IDLE) {
+        // _dids is priority-ordered (RPM first) so a slow DID's wait never starves it
+        // for longer than one UDS_RESPONSE_TIMEOUT_MS.
+        for (uint8_t i = 0; i < DID_SLOT_COUNT; i++) {
+            DidSlot& slot = _dids[i];
+            if (now < slot.skipUntilMs) {
+                continue; // temporarily skipped after repeated timeouts
+            }
+            if (now - slot.lastRequestMs >= slot.cadenceMs) {
+                slot.lastRequestMs = now;
+                _pendingDidIndex = i;
+                _pendingDid = slot.did;
+                _udsState = UdsRequestState::REQUEST_SENT;
 
-    // 4. Low Frequency Sequential Requests (Speed, Temp, TPS, Batt Volt - 200ms)
-    if (now - _lastSlowReq >= 200) {
-        _lastSlowReq = now;
-        switch (_slowSeq) {
-            case 0: requestDID(0xF40D); _slowSeq = 1; break; // Vehicle Speed
-            case 1: requestDID(0xF411); _slowSeq = 2; break; // Throttle Position
-            case 2: requestDID(0xF405); _slowSeq = 3; break; // Coolant Temperature
-            case 3: requestDID(0xF442); _slowSeq = 0; break; // Control Module Battery Voltage
+                requestDID(slot.did);
+
+                // Transmission above is synchronous (twai_transmit), so the request is
+                // immediately outstanding -- move straight into WAITING for its response.
+                _udsState = UdsRequestState::WAITING;
+                _requestSentMs = now;
+                _responseTimeoutMs = UDS_BASE_TIMEOUT_MS;
+                break; // exactly one request in flight at a time
+            }
+        }
+    } else if (_udsState == UdsRequestState::WAITING) {
+        if (now - _requestSentMs > _responseTimeoutMs) {
+            _udsState = UdsRequestState::TIMEOUT;
         }
     }
 
-    // 5. Read incoming CAN frames from Honda ECU
+    if (_udsState == UdsRequestState::TIMEOUT) {
+        DidSlot& slot = _dids[_pendingDidIndex];
+        slot.consecutiveTimeouts++;
+        Serial.printf("[UDS WARNING] Timeout waiting for DID 0x%04X (consecutive=%u/%u)\n",
+            _pendingDid, slot.consecutiveTimeouts, UDS_MAX_CONSECUTIVE_TIMEOUTS);
+
+        if (slot.consecutiveTimeouts >= UDS_MAX_CONSECUTIVE_TIMEOUTS) {
+            slot.skipUntilMs = now + UDS_DID_SKIP_COOLDOWN_MS;
+            slot.consecutiveTimeouts = 0;
+            Serial.printf("[UDS WARNING] DID 0x%04X unresponsive -- skipping requests for %lu ms.\n",
+                _pendingDid, UDS_DID_SKIP_COOLDOWN_MS);
+        }
+        _udsState = UdsRequestState::IDLE;
+    }
+
+    // 4. Read incoming CAN frames from Honda ECU
     twai_message_t rxMsg;
     while (twai_receive(&rxMsg, 0) == ESP_OK) {
         // Check if response comes from 29-bit or 11-bit UDS frame
@@ -185,23 +214,41 @@ void HondaCANModule::update(SystemState& state) {
                     state.engine.batteryVoltageUpdatedMs = now;
                     break;
             }
+
+            // G2.2 -- resolve the state machine only if this is the DID we're waiting on.
+            if (_udsState == UdsRequestState::WAITING && did == _pendingDid) {
+                _udsState = UdsRequestState::COMPLETE;
+            }
         } else if (isUDSResponse && rxMsg.data[1] == 0x7F && rxMsg.data_length_code >= 4) {
-            // G2.1 -- Negative response: [PCI][0x7F][echoed SID][NRC]. The ECU does not
-            // echo back which DID triggered this, so on 0x78 (responsePending) both
-            // request timers are pushed out uniformly rather than retrying immediately.
-            // G2.2's per-request state machine will correlate this to the exact DID.
+            // G2.1 -- Negative response: [PCI][0x7F][echoed SID][NRC].
             uint8_t echoedSid = rxMsg.data[2];
             uint8_t nrc = rxMsg.data[3];
             _nrcCount++;
 
             if (nrc == 0x78) {
-                _lastFastReq = now;
-                _lastSlowReq = now;
-                Serial.printf("[UDS] NRC 0x78 responsePending for SID 0x%02X -- extending wait, not retrying yet.\n", echoedSid);
+                // responsePending: the ECU is still working on the DID we're WAITING on.
+                // Reset and double the timeout (capped) instead of declaring a timeout.
+                if (_udsState == UdsRequestState::WAITING) {
+                    _requestSentMs = now;
+                    _responseTimeoutMs = min(_responseTimeoutMs * 2, UDS_MAX_TIMEOUT_MS);
+                }
+                Serial.printf("[UDS] NRC 0x78 responsePending for SID 0x%02X -- extending wait to %lu ms.\n",
+                    echoedSid, _responseTimeoutMs);
             } else {
                 Serial.printf("[UDS WARNING] Negative response: SID=0x%02X NRC=0x%02X (%s) [total NRCs=%lu]\n",
                     echoedSid, nrc, nrcName(nrc), (unsigned long)_nrcCount);
+                // Any other NRC definitively resolves this request (not a timeout, not
+                // success) -- don't leave the state machine WAITING on a DID that was
+                // just explicitly rejected.
+                if (_udsState == UdsRequestState::WAITING) {
+                    _udsState = UdsRequestState::COMPLETE;
+                }
             }
         }
+    }
+
+    if (_udsState == UdsRequestState::COMPLETE) {
+        _dids[_pendingDidIndex].consecutiveTimeouts = 0;
+        _udsState = UdsRequestState::IDLE;
     }
 }
