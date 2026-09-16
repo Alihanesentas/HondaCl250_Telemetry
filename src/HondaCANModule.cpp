@@ -207,7 +207,26 @@ void HondaCANModule::update(SystemState& state) {
     while (twai_receive(&rxMsg, 0) == ESP_OK) {
         // Check if response comes from 29-bit or 11-bit UDS frame
         bool isUDSResponse = (rxMsg.identifier == HONDA_UDS_RESP_29BIT || rxMsg.identifier == HONDA_UDS_RESP_11BIT);
-        
+
+        // G2.4 -- ISO-TP (ISO 15765-2) PCI byte check. rxMsg.data[0] high nibble is the
+        // frame type: 0x0X = Single Frame (X = payload length, what every DID response
+        // here has always been), 0x1X = First Frame of a multi-frame response, 0x2X =
+        // Consecutive Frame, 0x3X = Flow Control. The code below has always assumed
+        // Single Frame and read data[1] straight as the SID; a First Frame's data[1] is
+        // actually part of the multi-frame *length* field, not a SID, so parsing it as
+        // one would silently corrupt SystemState. Multi-frame reassembly (First Frame +
+        // Flow Control + Consecutive Frames) is not implemented -- every DID used today
+        // fits in a Single Frame (<=7 bytes), so this only guards against silently
+        // misreading a response that grows past that in the future.
+        if (isUDSResponse) {
+            uint8_t isoTpFrameType = (rxMsg.data[0] >> 4) & 0x0F;
+            if (isoTpFrameType != 0x0) {
+                Serial.printf("[UDS WARNING] Unsupported ISO-TP frame type 0x%X (PCI=0x%02X) -- multi-frame responses are not handled, dropping frame.\n",
+                    isoTpFrameType, rxMsg.data[0]);
+                continue;
+            }
+        }
+
         if (isUDSResponse && rxMsg.data[1] == 0x62) {
             uint16_t did = (rxMsg.data[2] << 8) | rxMsg.data[3];
             switch (did) {

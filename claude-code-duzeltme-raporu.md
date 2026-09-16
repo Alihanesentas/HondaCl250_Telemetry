@@ -130,6 +130,7 @@
 **Kabul:** ECU bağlı değilken sistem açılıyor, çalışıyor, durumu bildiriyor.
 
 ### G2.4 — ISO-TP çok çerçeveli yanıt kontrolü
+> ✅ **TAMAMLANDI** — `src/HondaCANModule.cpp:205-225`. PCI baytının üst nibble'ı kontrol ediliyor; Single Frame (0x0X) dışındaki her şey (First/Consecutive/Flow Control) açıkça loglanıp çerçeve düşürülüyor, artık `data[1]`'in yanlışlıkla SID sanılıp `SystemState`'e sessizce bozuk veri yazılması engellendi. Çok çerçeveli yeniden birleştirme (reassembly) hâlâ desteklenmiyor — mevcut DID'lerin hepsi zaten tek çerçeveye sığıyor, bu sadece gelecekte sessiz bozulmaya karşı bir koruma. Build ile doğrulandı.
 **Problem:** Şu anki DID yanıtları tek çerçeveye sığıyor olabilir; 7 bayttan uzun bir yanıt gelirse sessizce bozulur.
 **Yap:** Gelen çerçevenin PCI baytını kontrol et. Çok çerçeveli (First Frame) yanıt gelirse ya doğru işle ya da açıkça "desteklenmiyor" olarak logla — sessiz hata bırakma.
 **Kabul:** Çok çerçeveli yanıt durumu kodda açıkça ele alınmış.
