@@ -7,11 +7,9 @@
 // helper and the BLE packet's exact wire layout. Run with:
 //   pio test -e native
 //
-// HondaCANModule's UDS protocol state machine itself (request/response FSM, NRC
-// handling) is NOT covered here -- unit-testing it would need a CAN bus
-// abstraction injected into that module, which was deliberately reverted (see
-// claude-code-duzeltme-raporu.md, G3.2) so the hardware-verified CAN receive path
-// stays untouched. That remains an open item, not something this suite claims.
+// HondaCANModule's actual UDS protocol logic (request state machine, NRC
+// handling, ISO-TP frame checking, bus-off recovery) is covered separately in
+// test/test_can_protocol against a MockCanBus -- see that suite for those tests.
 
 void setUp(void) {}
 void tearDown(void) {}
@@ -123,7 +121,7 @@ void test_ble_packet_raw_byte_layout_is_little_endian(void) {
     TEST_ASSERT_EQUAL_HEX8(0x12, raw[3]);
 }
 
-int main(int argc, char** argv) {
+int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_system_state_initial_values);
     RUN_TEST(test_isStale_never_updated_is_always_stale);

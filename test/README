@@ -1,11 +1,25 @@
+This project has three PlatformIO test suites:
 
-This directory is intended for PlatformIO Test Runner and project tests.
+- test_native/       Host-only (no board needed). SystemState's isStale() and
+                      BLETelemetryPacket's exact wire layout. Run with:
+                        pio test -e native -f test_native
 
-Unit Testing is a software testing method by which individual units of
-source code, sets of one or more MCU program modules together with associated
-control data, usage procedures, and operating procedures, are tested to
-determine whether they are fit for use. Unit testing finds problems early
-in the development cycle.
+- test_can_protocol/ Host-only (no board needed). HondaCANModule's real UDS
+                      protocol logic (request state machine, NRC handling,
+                      ISO-TP frame checking, bus-off recovery) against
+                      test/mocks/MockCanBus.h instead of real TWAI hardware.
+                        pio test -e native -f test_can_protocol
 
-More information about PlatformIO Unit Testing:
-- https://docs.platformio.org/en/latest/advanced/unit-testing/index.html
+- test_embedded/     Runs ON the ESP32-S3 board over USB (Unity output via
+                      Serial). Requires the board connected.
+                        pio test -e esp32-s3-devkitc-1
+
+Run every native (no-hardware) suite at once with:
+  pio test -e native
+
+test/native_stubs/Arduino.h provides just enough of the Arduino API
+(millis()/delay()/Serial/min()/max()) for the native platform to compile
+SystemState.h, BLETelemetryPacket.h, and HondaCANModule.cpp unmodified.
+
+More on PlatformIO Unit Testing:
+https://docs.platformio.org/en/latest/advanced/unit-testing/index.html

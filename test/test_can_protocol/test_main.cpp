@@ -246,7 +246,7 @@ void test_did_skipped_after_max_consecutive_timeouts_then_resumes(void) {
     TEST_ASSERT_TRUE(bus.countDidRequests(0xF40C) > rpmReqsAtSkipStart);
 }
 
-int main(int argc, char** argv) {
+int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_rpm_decode_updates_state_and_ecu_presence);
     RUN_TEST(test_session_confirm_is_recognized);
